@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Settings - Setuora{% endblock %}
+{% from "partials/ledger_mapping_editor.html" import sales_ledger_editor %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">System</p>
+    <h1>Settings</h1>
+  </div>
+  {% if (role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit')) or has_role(user, 'super_admin') %}
+  <div class="actions">
+    {% if role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit') %}
+    <a class="button" href="/tally-check">Tally Check</a>
+    {% endif %}
+    {% if has_role(user, 'super_admin') %}
+    <a class="button" href="/settings/access">Role access</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{% if error and not open_settings %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<div class="section-title">
+  <h2>Companies</h2>
+  <span>Click the active company to edit its Tally settings</span>
+</div>
+<section class="panel">
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Label</th><th>Tally company</th><th>Status</th><th class="col-actions">Actions</th></tr></thead>
+      <tbody>
+        {% for company in companies %}
+        <tr class="company-row {{ 'is-active' if company.is_active else '' }}" {% if company.is_active %}data-edit-company{% endif %}>
+          <td>{{ company.name }}</td>
+          <td>{{ company.tally_company_name }}</td>
+          <td>
+            {% if company.is_active %}<span class="status active">Active</span>
+            {% else %}<span class="status">Saved</span>{% endif %}
+          </td>
+          <td>
+            <div class="row-actions">
+              {% if company.is_active %}
+              <button class="button small" type="button" data-edit-company>Edit</button>
+              {% else %}
+              <form method="post" action="/settings/companies/{{ company.id }}/activate">
+                <button class="button small" type="submit">Set active</button>
+              </form>
+              <form method="post" action="/settings/companies/{{ company.id }}/delete"
+                    onsubmit="return confirm('Delete the company profile {{ company.name }}?');">
+                <button class="button small ghost" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty">No companies yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<details class="panel add-company">
+  <summary>Add a company</summary>
+  <form method="post" action="/settings/companies" class="stack">
+    <p class="muted">Saved as a profile. Activate it to sync to this Tally company. Use the exact names from Tally.</p>
+    <div class="two-col">
+      <label>Label (shown in Setuora)<input name="name" placeholder="e.g. Swarnagowri Foods"></label>
+      <label>Tally company name<input name="company_name" required></label>
+    </div>
+    <div class="two-col">
+      <label>Tally host<input name="tally_host" value="{{ settings.tally_host }}" required></label>
+      <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ settings.tally_port }}" required></label>
+    </div>
+    {{ sales_ledger_editor() }}
+    <label>Round off ledger<input name="round_off_ledger_name" required></label>
+    <div><button class="button primary" type="submit">Add company</button></div>
+  </form>
+</details>
+
+<dialog id="company-modal" class="modal" data-open="{{ 'true' if open_settings else 'false' }}">
+  <div class="modal__head">
+    <div>
+      <h2>Active company settings</h2>
+      {% if active %}<small class="muted">Editing {{ active.name }}</small>{% endif %}
+    </div>
+    <button class="button ghost modal__close" type="button" data-close-modal aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    {% if error and open_settings %}<div class="alert error">{{ error }}</div>{% endif %}
+    <form method="post" action="/settings" class="stack" data-autosave="/settings/autosave">
+      <label>Company name<input name="company_name" value="{{ settings.company_name }}" required></label>
+      <label class="checkline">
+        <input type="checkbox" name="tally_enabled" value="true" data-no-autosave {{ 'checked' if settings.tally_enabled == 'true' else '' }}>
+        Automatically sync completed purchases and sales with Tally
+        <small class="muted" style="display:inline">- saved only with the button below; pending syncs retry in the background</small>
+      </label>
+      <div class="two-col">
+        <label>Tally host<input name="tally_host" value="{{ settings.tally_host }}" required></label>
+        <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ settings.tally_port }}" required></label>
+      </div>
+      <input type="hidden" name="sales_voucher_type" value="{{ settings.sales_voucher_type }}">
+      <input type="hidden" name="purchase_voucher_type" value="{{ settings.purchase_voucher_type }}">
+      <input type="hidden" name="sales_ledger_name" value="{{ settings.sales_ledger_name }}">
+      <input type="hidden" name="purchase_ledger_name" value="{{ settings.purchase_ledger_name }}">
+      <input type="hidden" name="cgst_ledger_name" value="{{ settings.cgst_ledger_name }}">
+      <input type="hidden" name="sgst_ledger_name" value="{{ settings.sgst_ledger_name }}">
+      {{ sales_ledger_editor(settings.sales_gst_ledger_mappings) }}
+      <label>Round off ledger<input name="round_off_ledger_name" value="{{ settings.round_off_ledger_name }}" required></label>
+      <label>Retry interval seconds<input name="retry_interval_seconds" type="number" min="30" step="1" value="{{ settings.retry_interval_seconds }}" required></label>
+      <div class="save-row">
+        <button class="button primary full" type="submit">Save settings</button>
+        <span data-autosave-status class="autosave-status"></span>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script src="/static/ledger-mapping-editor.js?v=20260715-tally-live-1"></script>
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    const dialog = document.getElementById("company-modal");
+    if (!dialog) return;
+    const open = () => { if (!dialog.open) { dialog.showModal ? dialog.showModal() : dialog.setAttribute("open", ""); } };
+    document.querySelectorAll("[data-edit-company]").forEach((el) => {
+      el.addEventListener("click", (event) => { event.preventDefault(); open(); });
+    });
+    dialog.querySelectorAll("[data-close-modal]").forEach((el) => {
+      el.addEventListener("click", () => dialog.close());
+    });
+    dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+    if (dialog.dataset.open === "true") open();
+  })();
+</script>
+{% endblock %}

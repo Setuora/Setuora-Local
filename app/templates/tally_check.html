@@ -1,0 +1,644 @@
+{% extends "base.html" %}
+{% from "partials/ledger_mapping_editor.html" import sales_ledger_editor %}
+{% block title %}Tally Check - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Tally setup</p>
+    <h1>Companies</h1>
+  </div>
+</section>
+
+<section class="panel company-list-panel">
+  <div class="section-title company-list-title">
+    <h2>Company names</h2>
+    <span>{{ companies|length }} compan{{ 'y' if companies|length == 1 else 'ies' }}</span>
+  </div>
+  <form class="search tally-search" role="search" data-tally-search-form>
+    <input type="search" placeholder="Search companies or ledgers" aria-label="Search configured companies or ledgers" data-tally-search-input>
+    <button class="button" type="submit">Search</button>
+  </form>
+  <div class="company-name-list" data-tally-company-list>
+    {% for row in companies %}
+    <button
+      class="company-name-card"
+      type="button"
+      data-company-open="company-modal-{{ row.company.id }}"
+      data-tally-company-search="{{ [row.company.name, row.config.company_name, row.config.sales_voucher_type, row.config.purchase_voucher_type, row.config.sales_ledger_name, row.config.purchase_ledger_name, row.config.cgst_ledger_name, row.config.sgst_ledger_name, row.config.round_off_ledger_name, row.config.sales_gst_ledger_mappings]|join(' ') }}"
+      aria-haspopup="dialog"
+    >
+      <span class="company-name-card__identity">
+        <span data-company-name="{{ row.company.id }}">{{ row.company.name }}</span>
+        <small>{{ row.config.company_name or 'No Tally company name' }}</small>
+      </span>
+      {% if row.company.is_active %}
+      <small class="status active">Active</small>
+      {% endif %}
+    </button>
+    {% else %}
+    <div class="empty company-empty">
+      <p>No company profiles are available for this account.</p>
+      {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}
+      <a class="button primary" href="/settings">Add a company</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="empty company-empty" data-tally-company-search-empty hidden>
+      No matching company or ledger found.
+    </div>
+  </div>
+</section>
+
+{% for row in companies %}
+<dialog
+  id="company-modal-{{ row.company.id }}"
+  class="modal product-modal company-config-modal"
+  {% if open_company_id == row.company.id %}data-auto-open="true"{% endif %}
+>
+  <div class="modal__head">
+    <div>
+      <p class="eyebrow">{{ 'Active company' if row.company.is_active else 'Saved company' }}</p>
+      <h2 data-company-modal-name="{{ row.company.id }}">{{ row.company.name }}</h2>
+    </div>
+    <button class="button ghost modal__close" type="button" data-company-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body product-modal-body">
+    <div class="product-summary-grid company-summary-grid">
+      <div><span>Tally company</span><strong>{{ row.config.company_name or '-' }}</strong></div>
+      <div><span>Connection</span><strong>{{ row.config.tally_host }}:{{ row.config.tally_port }}</strong></div>
+      <div><span>Round-off ledger</span><strong>{{ row.config.round_off_ledger_name or '-' }}</strong></div>
+    </div>
+
+    {% if can_edit_companies %}
+    <section class="product-modal-section">
+      <div class="product-modal-section__head">
+        <div>
+          <h3>Company settings</h3>
+          <p>Connection and product GST ledgers.</p>
+        </div>
+      </div>
+      <form
+        method="post"
+        action="/tally-check/companies/{{ row.company.id }}"
+        class="product-modal-form company-modal-form"
+        data-company-settings-form
+        data-company-id="{{ row.company.id }}"
+      >
+        <label>Display name<input name="name" value="{{ row.company.name }}" required></label>
+        <label>Tally company name<input name="company_name" value="{{ row.config.company_name }}" list="tally-companies-{{ row.company.id }}" required></label>
+        <label>Tally host<input name="tally_host" value="{{ row.config.tally_host }}" required></label>
+        <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ row.config.tally_port }}" required></label>
+        <input type="hidden" name="sales_voucher_type" value="{{ row.config.sales_voucher_type }}">
+        <input type="hidden" name="purchase_voucher_type" value="{{ row.config.purchase_voucher_type }}">
+        <input type="hidden" name="sales_ledger_name" value="{{ row.config.sales_ledger_name }}">
+        <input type="hidden" name="purchase_ledger_name" value="{{ row.config.purchase_ledger_name }}">
+        <input type="hidden" name="cgst_ledger_name" value="{{ row.config.cgst_ledger_name }}">
+        <input type="hidden" name="sgst_ledger_name" value="{{ row.config.sgst_ledger_name }}">
+        <label>Round-off ledger<input name="round_off_ledger_name" value="{{ row.config.round_off_ledger_name }}" list="tally-ledgers-{{ row.company.id }}" required></label>
+        {{ sales_ledger_editor(row.config.sales_gst_ledger_mappings, 'tally-ledgers-' ~ row.company.id) }}
+        <div class="product-modal-actions">
+          <span class="autosave-status" data-company-save-status aria-live="polite"></span>
+          <button class="button primary" type="submit" data-company-save-button>Save settings</button>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
+    <section
+      class="product-modal-section tally-live-browser"
+      data-tally-live-browser
+      data-company-id="{{ row.company.id }}"
+      data-current-company="{{ row.config.company_name }}"
+      data-auto-refresh="{{ 'true' if row.company.is_active else 'false' }}"
+    >
+      <div class="product-modal-section__head tally-live-head">
+        <div>
+          <h3>Live Tally data</h3>
+          <p>Load companies and ledger names from Tally, then review the selected company's sales book.</p>
+        </div>
+        <button class="button" type="button" data-tally-live-connect>Load from Tally</button>
+      </div>
+
+      <datalist id="tally-companies-{{ row.company.id }}" data-tally-company-options></datalist>
+      <datalist id="tally-ledgers-{{ row.company.id }}" data-tally-ledger-options></datalist>
+
+      <div class="tally-live-controls">
+        <label>Tally company
+          <select data-tally-live-company disabled>
+            <option value="">Load companies first</option>
+          </select>
+        </label>
+        {% if can_edit_companies %}
+        <button class="button secondary tally-live-use-company" type="button" data-tally-live-use-company disabled>
+          Use for sync
+        </button>
+        {% endif %}
+        <label>Sales book from
+          <input type="date" value="{{ live_sales_from }}" data-tally-live-from>
+        </label>
+        <label>Sales book to
+          <input type="date" value="{{ live_sales_to }}" data-tally-live-to>
+        </label>
+        <button class="button secondary tally-live-refresh" type="button" data-tally-live-refresh disabled>
+          Refresh data
+        </button>
+      </div>
+      <p class="tally-live-status muted" data-tally-live-status aria-live="polite">
+        TallyPrime must be running with its HTTP server enabled.
+      </p>
+
+      <div class="tally-live-results" data-tally-live-results hidden>
+        <section class="tally-live-card">
+          <div class="section-title tally-live-card__title">
+            <h4>Ledger names</h4>
+            <span data-tally-live-ledger-count>0 ledgers</span>
+          </div>
+          <div class="table-scroll tally-live-table-scroll">
+            <table>
+              <thead><tr><th>Ledger</th><th>Group</th><th>Closing balance</th></tr></thead>
+              <tbody data-tally-live-ledgers>
+                <tr><td colspan="3" class="empty">Load a Tally company to see ledgers.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="tally-live-card tally-live-sales-card">
+          <div class="section-title tally-live-card__title">
+            <h4>Sales book</h4>
+            <span data-tally-live-sales-count>0 vouchers</span>
+          </div>
+          <div class="table-scroll tally-live-table-scroll">
+            <table>
+              <thead><tr><th>Date</th><th>Voucher</th><th>Party ledger</th><th>Tally user</th><th>Amount</th></tr></thead>
+              <tbody data-tally-live-sales>
+                <tr><td colspan="5" class="empty">Load a Tally company to see sales vouchers.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    {% if row.company.is_active %}
+    <section class="product-modal-section">
+      <div class="product-modal-section__head company-check-head">
+        <div>
+          <h3>Tally verification</h3>
+          <p>Check the gateway and confirm exact master names for the active company.</p>
+        </div>
+        <form method="post" action="/tally-check/test-gateway">
+          <button class="button" type="submit">Test gateway</button>
+        </form>
+      </div>
+
+      {% if result %}
+      <div class="alert {{ 'success' if result.ok else 'error' }}" role="status">
+        <strong>{{ result.message }}</strong>
+        {% if result.ok %}
+        <small class="gateway-result-detail">The configured Tally HTTP server is reachable and responding correctly.</small>
+        {% elif result.response_excerpt %}
+        <pre class="response-preview">{{ result.response_excerpt }}</pre>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <section class="metric-grid readiness-grid company-readiness-grid">
+        <div class="metric"><span>Total</span><strong>{{ counts.total }}</strong></div>
+        <div class="metric"><span>Ready</span><strong>{{ counts.ready }}</strong></div>
+        <div class="metric warn"><span>Unchecked</span><strong>{{ counts.unchecked }}</strong></div>
+        <div class="metric danger"><span>Missing</span><strong>{{ counts.missing }}</strong></div>
+        <div class="metric"><span>Confirmed</span><strong>{{ counts.confirmed }}</strong></div>
+      </section>
+
+      <div class="table-scroll company-master-scroll">
+        <table class="company-master-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Tally master</th>
+              <th>Status</th>
+              <th>Check</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in requirements %}
+            {% set confirmation = confirmations.get(item.key) %}
+            <tr data-tally-master-search-row data-tally-master-search="{{ item.master_type }} {{ item.master_name }} {{ item.source }} {{ item.detail }}">
+              <td>{{ item.master_type }}</td>
+              <td>
+                {% if item.master_name %}
+                <strong>{{ item.master_name }}</strong>
+                <small>{{ item.detail }}</small>
+                {% else %}
+                <span class="muted">Missing value</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="tally-local-state {{ 'is-ready' if item.local_status == 'READY' else 'is-missing' }}">
+                  {{ 'Ready' if item.local_status == 'READY' else 'Missing' }}
+                </span>
+              </td>
+              <td class="tally-check-cell">
+                {% if item.local_status == 'READY' and confirmation %}
+                <form method="post" action="/tally-check/unconfirm" class="tally-confirm-form">
+                  <input type="hidden" name="master_type" value="{{ item.master_type }}">
+                  <input type="hidden" name="master_name" value="{{ item.master_name }}">
+                  <button
+                    class="tally-check-toggle is-checked"
+                    type="submit"
+                    title="Checked by {{ confirmation.confirmed_by.username }} on {{ confirmation.confirmed_at.strftime('%d %b %Y at %H:%M') }}. Click to undo."
+                    aria-label="Checked. Click to undo."
+                  >
+                    <span class="tally-check-toggle__box" aria-hidden="true">✓</span>
+                    <span>Checked</span>
+                  </button>
+                </form>
+                {% elif item.local_status == 'READY' %}
+                <form method="post" action="/tally-check/confirm" class="tally-confirm-form">
+                  <input type="hidden" name="master_type" value="{{ item.master_type }}">
+                  <input type="hidden" name="master_name" value="{{ item.master_name }}">
+                  <input type="hidden" name="source" value="{{ item.source }}">
+                  <button class="tally-check-toggle" type="submit">
+                    <span class="tally-check-toggle__box" aria-hidden="true"></span>
+                    <span>Check</span>
+                  </button>
+                </form>
+                {% else %}
+                <span class="muted">Set up first</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="empty">No Tally masters found</td></tr>
+            {% endfor %}
+            <tr data-tally-master-search-empty hidden><td colspan="4" class="empty">No matching Tally master found</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% else %}
+    <section class="product-modal-section">
+      <div class="empty">
+        Activate this company from Settings before testing its gateway or confirming Tally masters.
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</dialog>
+{% endfor %}
+
+<script src="/static/ledger-mapping-editor.js?v=20260715-tally-live-1"></script>
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    function openDialog(dialog) {
+      if (!dialog) return;
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+      dialog.dispatchEvent(new CustomEvent("setuora:dialog-opened"));
+    }
+
+    document.querySelectorAll("[data-company-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openDialog(document.getElementById(button.dataset.companyOpen));
+      });
+    });
+
+    document.querySelectorAll("dialog.company-config-modal").forEach((dialog) => {
+      dialog.querySelectorAll("[data-company-close]").forEach((button) => {
+        button.addEventListener("click", () => dialog.close());
+      });
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) dialog.close();
+      });
+      if (dialog.dataset.autoOpen === "true") openDialog(dialog);
+    });
+
+    const tallySearchForm = document.querySelector("[data-tally-search-form]");
+    if (tallySearchForm) {
+      const input = tallySearchForm.querySelector("[data-tally-search-input]");
+      const companyCards = Array.from(document.querySelectorAll("[data-tally-company-search]"));
+      const companyEmpty = document.querySelector("[data-tally-company-search-empty]");
+      const masterBodies = Array.from(document.querySelectorAll(".company-master-table tbody"));
+
+      const normalise = (value) => value.trim().toLocaleLowerCase();
+      const applyTallySearch = () => {
+        const query = normalise(input.value);
+        let visibleCompanies = 0;
+        companyCards.forEach((card) => {
+          const matches = !query || normalise(card.dataset.tallyCompanySearch || "").includes(query);
+          card.hidden = !matches;
+          if (matches) visibleCompanies += 1;
+        });
+        if (companyEmpty) companyEmpty.hidden = !query || visibleCompanies > 0 || companyCards.length === 0;
+
+        masterBodies.forEach((body) => {
+          const rows = Array.from(body.querySelectorAll("[data-tally-master-search-row]"));
+          const noMatches = body.querySelector("[data-tally-master-search-empty]");
+          let visibleRows = 0;
+          rows.forEach((row) => {
+            const matches = !query || normalise(row.dataset.tallyMasterSearch || "").includes(query);
+            row.hidden = !matches;
+            if (matches) visibleRows += 1;
+          });
+          if (noMatches) noMatches.hidden = !query || rows.length === 0 || visibleRows > 0;
+        });
+      };
+
+      tallySearchForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        applyTallySearch();
+      });
+      input.addEventListener("input", applyTallySearch);
+    }
+
+    document.querySelectorAll("[data-company-settings-form]").forEach((form) => {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const status = form.querySelector("[data-company-save-status]");
+        const button = form.querySelector("[data-company-save-button]");
+        status.textContent = "Saving...";
+        status.className = "autosave-status saving";
+        button.disabled = true;
+        fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          headers: { Accept: "application/json" }
+        })
+          .then((response) => response.json().then((payload) => ({ response, payload })))
+          .then(({ response, payload }) => {
+            if (!response.ok || !payload.ok) throw new Error(payload.error || "Save failed");
+            status.textContent = "Saved";
+            status.className = "autosave-status ok";
+            window.location.href = "/tally-check?company=" + form.dataset.companyId;
+          })
+          .catch((error) => {
+            status.textContent = error.message || "Save failed";
+            status.className = "autosave-status error";
+            button.disabled = false;
+          });
+      });
+    });
+
+    function tableMessage(body, columns, message) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = columns;
+      cell.className = "empty";
+      cell.textContent = message;
+      row.appendChild(cell);
+      body.replaceChildren(row);
+    }
+
+    function cell(value, className) {
+      const item = document.createElement("td");
+      item.textContent = value || "-";
+      if (className) item.className = className;
+      return item;
+    }
+
+    async function fetchPayload(url) {
+      const response = await fetch(url, {
+        headers: { Accept: "application/json", "X-Setuora-Background": "true" }
+      });
+      if (response.redirected && new URL(response.url).pathname === "/login") {
+        window.location.assign(response.url);
+        throw new Error("Your session expired. Sign in again.");
+      }
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.toLowerCase().includes("application/json")) {
+        throw new Error(
+          response.ok
+            ? "The server returned an unexpected response. Refresh the page and try again."
+            : "Tally request failed (server response " + response.status + ")."
+        );
+      }
+      let payload;
+      try {
+        payload = await response.json();
+      } catch (_error) {
+        throw new Error("The server returned an unreadable response. Refresh the page and try again.");
+      }
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || payload.detail || "Tally request failed");
+      }
+      return payload;
+    }
+
+    document.querySelectorAll("[data-tally-live-browser]").forEach((browser) => {
+      const companyId = browser.dataset.companyId;
+      const currentCompany = browser.dataset.currentCompany || "";
+      const connectButton = browser.querySelector("[data-tally-live-connect]");
+      const companySelect = browser.querySelector("[data-tally-live-company]");
+      const useCompanyButton = browser.querySelector("[data-tally-live-use-company]");
+      const refreshButton = browser.querySelector("[data-tally-live-refresh]");
+      const fromInput = browser.querySelector("[data-tally-live-from]");
+      const toInput = browser.querySelector("[data-tally-live-to]");
+      const status = browser.querySelector("[data-tally-live-status]");
+      const results = browser.querySelector("[data-tally-live-results]");
+      const companyOptions = browser.querySelector("[data-tally-company-options]");
+      const ledgerOptions = browser.querySelector("[data-tally-ledger-options]");
+      const ledgerBody = browser.querySelector("[data-tally-live-ledgers]");
+      const salesBody = browser.querySelector("[data-tally-live-sales]");
+      const ledgerCount = browser.querySelector("[data-tally-live-ledger-count]");
+      const salesCount = browser.querySelector("[data-tally-live-sales-count]");
+      let initialized = false;
+
+      function setStatus(message, isError) {
+        status.textContent = message;
+        status.className = "tally-live-status " + (isError ? "is-error" : "muted");
+      }
+
+      function selectedCompany() {
+        return companySelect.value.trim();
+      }
+
+      function query(values) {
+        return new URLSearchParams(values).toString();
+      }
+
+      function renderLedgers(payload) {
+        ledgerOptions.replaceChildren();
+        ledgerBody.replaceChildren();
+        payload.ledgers.forEach((ledger) => {
+          const option = document.createElement("option");
+          option.value = ledger.name;
+          ledgerOptions.appendChild(option);
+          const row = document.createElement("tr");
+          row.append(
+            cell(ledger.name),
+            cell(ledger.parent),
+            cell(ledger.closing_balance, "amount")
+          );
+          ledgerBody.appendChild(row);
+        });
+        if (!payload.ledgers.length) tableMessage(ledgerBody, 3, "No ledgers were returned by Tally.");
+        ledgerCount.textContent = payload.count + " ledger" + (payload.count === 1 ? "" : "s");
+      }
+
+      function renderSales(payload) {
+        salesBody.replaceChildren();
+        payload.vouchers.forEach((voucher) => {
+          const row = document.createElement("tr");
+          if (voucher.narration) row.title = voucher.narration;
+          row.append(
+            cell(voucher.date),
+            cell([voucher.voucher_type, voucher.voucher_number].filter(Boolean).join(" ")),
+            cell(voucher.party_ledger),
+            cell(voucher.tally_user),
+            cell(voucher.amount, "amount")
+          );
+          salesBody.appendChild(row);
+        });
+        if (!payload.vouchers.length) tableMessage(salesBody, 5, "No sales vouchers were found for this period or access scope.");
+        salesCount.textContent = payload.count + " voucher" + (payload.count === 1 ? "" : "s");
+      }
+
+      async function loadSelectedCompany(preserveExisting) {
+        const company = selectedCompany();
+        if (!company) return;
+        refreshButton.disabled = true;
+        if (useCompanyButton) useCompanyButton.disabled = true;
+        results.hidden = false;
+        setStatus(
+          preserveExisting
+            ? "Saved data loaded. Checking Tally for new ledgers and vouchers..."
+            : "Loading ledgers and sales book from " + company + "...",
+          false
+        );
+        if (!preserveExisting) {
+          tableMessage(ledgerBody, 3, "Loading ledgers...");
+          tableMessage(salesBody, 4, "Loading sales book...");
+        }
+        try {
+          const ledgerUrl = "/tally-check/companies/" + companyId + "/live/ledgers?" + query({ tally_company: company });
+          const salesUrl = "/tally-check/companies/" + companyId + "/live/sales-book?" + query({
+            tally_company: company,
+            from_date: fromInput.value,
+            to_date: toInput.value
+          });
+          const payloads = await Promise.all([fetchPayload(ledgerUrl), fetchPayload(salesUrl)]);
+          renderLedgers(payloads[0]);
+          renderSales(payloads[1]);
+          setStatus("Tally data refreshed and saved for " + company + ".", false);
+        } catch (error) {
+          if (!preserveExisting) {
+            tableMessage(ledgerBody, 3, "Could not load ledgers.");
+            tableMessage(salesBody, 4, "Could not load the sales book.");
+          }
+          setStatus(
+            (preserveExisting ? "Showing saved data. Automatic refresh failed: " : "") +
+              (error.message || "Could not load Tally data."),
+            true
+          );
+        } finally {
+          refreshButton.disabled = false;
+          if (useCompanyButton) useCompanyButton.disabled = false;
+        }
+      }
+
+      function selectCurrentCompany() {
+        const company = currentCompany.trim();
+        if (!company) return false;
+        const option = document.createElement("option");
+        option.value = company;
+        option.textContent = company;
+        companySelect.replaceChildren(option);
+        companySelect.value = company;
+        companySelect.disabled = false;
+        refreshButton.disabled = false;
+        if (useCompanyButton) useCompanyButton.disabled = false;
+        return true;
+      }
+
+      async function loadCachedData() {
+        const company = selectedCompany();
+        if (!company) return false;
+        const cacheUrl = "/tally-check/companies/" + companyId + "/cached?" + query({
+          tally_company: company,
+          from_date: fromInput.value,
+          to_date: toInput.value
+        });
+        const payload = await fetchPayload(cacheUrl);
+        if (!payload.ledger_count && !payload.sales_count) return false;
+        results.hidden = false;
+        renderLedgers({ count: payload.ledger_count, ledgers: payload.ledgers });
+        renderSales({ count: payload.sales_count, vouchers: payload.vouchers });
+        setStatus("Saved Tally data loaded. Checking for updates...", false);
+        return true;
+      }
+
+      async function initializeAutomaticRefresh() {
+        if (initialized || !selectCurrentCompany()) return;
+        initialized = true;
+        connectButton.disabled = true;
+        let hasCachedData = false;
+        try {
+          hasCachedData = await loadCachedData();
+        } catch (_error) {
+          hasCachedData = false;
+        }
+        try {
+          await loadSelectedCompany(hasCachedData);
+        } finally {
+          connectButton.disabled = false;
+        }
+      }
+
+      connectButton.addEventListener("click", async () => {
+        connectButton.disabled = true;
+        setStatus("Connecting to Tally...", false);
+        try {
+          const payload = await fetchPayload(
+            "/tally-check/companies/" + companyId + "/live/companies"
+          );
+          companySelect.replaceChildren();
+          companyOptions.replaceChildren();
+          payload.companies.forEach((name) => {
+            const option = document.createElement("option");
+            option.value = name;
+            option.textContent = name;
+            companySelect.appendChild(option);
+            const dataOption = document.createElement("option");
+            dataOption.value = name;
+            companyOptions.appendChild(dataOption);
+          });
+          if (!payload.companies.length) throw new Error("Tally returned no loaded companies.");
+          const preferred = payload.companies.includes(currentCompany)
+            ? currentCompany
+            : payload.companies[0];
+          companySelect.value = preferred;
+          companySelect.disabled = false;
+          refreshButton.disabled = false;
+          if (useCompanyButton) useCompanyButton.disabled = false;
+          initialized = true;
+          await loadSelectedCompany(false);
+        } catch (error) {
+          setStatus(error.message || "Could not connect to Tally.", true);
+        } finally {
+          connectButton.disabled = false;
+        }
+      });
+
+      companySelect.addEventListener("change", () => loadSelectedCompany(false));
+      refreshButton.addEventListener("click", () => loadSelectedCompany(false));
+      if (useCompanyButton) {
+        useCompanyButton.addEventListener("click", () => {
+          const form = browser.parentElement.querySelector("[data-company-settings-form]");
+          const companyInput = form ? form.querySelector('input[name="company_name"]') : null;
+          if (!companyInput || !selectedCompany()) return;
+          companyInput.value = selectedCompany();
+          companyInput.dispatchEvent(new Event("input", { bubbles: true }));
+          setStatus("Selected " + selectedCompany() + " for sync. Save settings to apply it.", false);
+        });
+      }
+
+      const dialog = browser.closest("dialog.company-config-modal");
+      if (dialog) dialog.addEventListener("setuora:dialog-opened", initializeAutomaticRefresh);
+      if (browser.dataset.autoRefresh === "true" || (dialog && dialog.open)) {
+        initializeAutomaticRefresh();
+      }
+    });
+  })();
+</script>
+{% endblock %}

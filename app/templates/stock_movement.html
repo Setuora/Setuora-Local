@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Stock Movement - Setuora{% endblock %}
+{% block content %}
+{% set movement_excel_fields = "Product Code|Product Name|Category|Brand|Warehouse|Franchise Level|Batch|Current Stock|Units Sold|Movement Ratio %|Average Daily Sales|Average Weekly Sales|Average Monthly Sales|Estimated Days to Sell|Estimated Months to Sell|Movement Status|Inventory Signal|Nearest Expiry|Months Remaining|Expiry Risk|Estimated Unsold|Suggested Action" %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Inventory intelligence</p>
+    <h1>Stock Movement</h1>
+    <p class="muted">{{ report_date(summary.start) }} to {{ report_date(summary.end) }} · {{ summary.analysis_days }} days</p>
+  </div>
+  {% if role_can(user, 'stock_movement_export') %}
+  <div class="actions">
+    <a class="button" href="/stock-movement/export.xlsx?{{ export_query }}" data-xlsx-export data-xlsx-title="Customize stock movement export" data-xlsx-parameters="product_id|warehouse|category|brand|batch|franchise_level|expiry_period|movement|start|end" data-xlsx-fields="{{ movement_excel_fields }}">Excel</a>
+    <a class="button primary" href="/stock-movement/export.pdf?{{ export_query }}">PDF</a>
+  </div>
+  {% endif %}
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if saved %}<div class="alert">Movement settings saved.</div>{% endif %}
+
+<section class="metric-grid stock-movement-metrics">
+  <article class="metric"><span>Products</span><strong>{{ summary.total_products }}</strong></article>
+  <article class="metric"><span>Current stock</span><strong>{{ summary.current_stock }}</strong></article>
+  <article class="metric"><span>Units sold</span><strong>{{ summary.units_sold }}</strong></article>
+  <article class="metric warn"><span>Slow moving</span><strong>{{ summary.slow }}</strong></article>
+  <article class="metric danger"><span>Dead stock</span><strong>{{ summary.dead }}</strong></article>
+  <article class="metric danger"><span>High expiry risk</span><strong>{{ summary.expiry_risk }}</strong></article>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Analysis filters</h2>
+    <span>Use a custom date range or leave it blank to use the configured period.</span>
+  </div>
+  <form method="get" class="filters stock-movement-filters">
+    <label>Product
+      <select name="product_id">
+        <option value="">All products</option>
+        {% for product in filter_options.products %}
+        <option value="{{ product.id }}" {{ 'selected' if filters.product_id == product.id else '' }}>{{ product.product_code }} - {{ product.product_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse">
+        <option value="">All warehouses</option>
+        {% for value in filter_options.warehouses %}
+        <option value="{{ value }}" {{ 'selected' if filters.warehouse == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Franchise level
+      <select name="franchise_level">
+        <option value="">All levels</option>
+        {% for value in filter_options.franchise_levels %}
+        <option value="{{ value }}" {{ 'selected' if filters.franchise_level == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Category
+      <select name="category">
+        <option value="">All categories</option>
+        {% for value in filter_options.categories %}
+        <option value="{{ value }}" {{ 'selected' if filters.category == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Brand
+      <select name="brand">
+        <option value="">All brands</option>
+        {% for value in filter_options.brands %}
+        <option value="{{ value }}" {{ 'selected' if filters.brand == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Batch
+      <select name="batch">
+        <option value="">All batches</option>
+        {% for value in filter_options.batches %}
+        <option value="{{ value }}" {{ 'selected' if filters.batch == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Movement
+      <select name="movement">
+        <option value="">All movement</option>
+        {% for value in ['Fast Moving', 'Medium Moving', 'Slow Moving', 'Dead Stock'] %}
+        <option value="{{ value }}" {{ 'selected' if filters.movement == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Expiry period
+      <select name="expiry_period">
+        <option value="">All stock</option>
+        <option value="expired" {{ 'selected' if filters.expiry_period == 'expired' else '' }}>Already expired</option>
+        {% for value in [30, 60, 90, 180, 365] %}
+        <option value="{{ value }}" {{ 'selected' if filters.expiry_period == value|string else '' }}>Within {{ value }} days</option>
+        {% endfor %}
+        <option value="none" {{ 'selected' if filters.expiry_period == 'none' else '' }}>No expiry date</option>
+      </select>
+    </label>
+    <label>Start date<input type="date" name="start" value="{{ filters.start.isoformat() if filters.start else '' }}"></label>
+    <label>End date<input type="date" name="end" value="{{ filters.end.isoformat() if filters.end else '' }}"></label>
+    <div class="filter-actions">
+      <button class="button primary" type="submit">Analyze</button>
+      <a class="button ghost" href="/stock-movement">Reset</a>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Movement analysis</h2>
+    <span>{{ summary.fast }} fast · {{ summary.medium }} medium · {{ summary.overstocked }} overstocked · {{ summary.understocked }} understocked</span>
+  </div>
+  <div class="table-scroll stock-movement-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Warehouse / batch</th>
+          <th>Stock</th>
+          <th>Sold</th>
+          <th>Movement ratio</th>
+          <th>Sales velocity</th>
+          <th>Stock cover</th>
+          <th>Movement</th>
+          <th>Expiry risk</th>
+          <th>Suggested action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>
+            <strong>{{ row.product_name }}</strong>
+            <small>{{ row.product_code }}{% if row.brand %} · {{ row.brand }}{% endif %}{% if row.category %} · {{ row.category }}{% endif %}</small>
+          </td>
+          <td>
+            {{ row.warehouse }}
+            <small>{{ row.franchise_level }} · Batch {{ row.batch }}</small>
+          </td>
+          <td>{{ row.current_stock }}</td>
+          <td>{{ row.units_sold }}</td>
+          <td>{{ row.movement_ratio ~ '%' if row.movement_ratio is not none else 'N/A' }}</td>
+          <td>
+            {{ row.average_monthly_sales }}/month
+            <small>{{ row.average_daily_sales }}/day · {{ row.average_weekly_sales }}/week</small>
+          </td>
+          <td>
+            {% if row.estimated_days is not none %}
+            {{ row.estimated_days }} days
+            <small>{{ row.estimated_months }} months · {{ row.inventory_signal }}</small>
+            {% else %}
+            No sales
+            <small>{{ row.inventory_signal }}</small>
+            {% endif %}
+          </td>
+          <td><span class="status {{ row.movement_css }}">{{ row.movement_status }}</span></td>
+          <td>
+            <span class="status {{ row.expiry_css }}">{{ row.expiry_risk }}</span>
+            {% if row.nearest_expiry %}
+            <small>Nearest {{ report_date(row.nearest_expiry) }} · {{ row.months_remaining }} months</small>
+            {% endif %}
+            {% if row.estimated_unsold %}<small>{{ row.estimated_unsold }} units may remain unsold</small>{% endif %}
+          </td>
+          <td>{{ row.suggested_action }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty">No stock movement matches these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if role_can(user, 'settings_edit') %}
+<details class="panel movement-settings">
+  <summary>Movement classification settings</summary>
+  <form method="post" action="/stock-movement/settings" class="grid-form compact">
+    <label>Analysis period
+      <select name="analysis_days">
+        {% for value in [30, 60, 90, 180, 365] %}
+        <option value="{{ value }}" {{ 'selected' if config.analysis_days == value else '' }}>Last {{ value }} days</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Dead stock below %<input type="number" name="dead_below_pct" min="0" max="100" step="0.1" value="{{ config.dead_below_pct }}" required></label>
+    <label>Slow moving below %<input type="number" name="slow_below_pct" min="0" max="100" step="0.1" value="{{ config.slow_below_pct }}" required></label>
+    <label>Medium moving up to %<input type="number" name="medium_up_to_pct" min="0" max="100" step="0.1" value="{{ config.medium_up_to_pct }}" required></label>
+    <button class="button primary" type="submit">Save criteria</button>
+  </form>
+</details>
+{% endif %}
+
+<details class="panel movement-formulas">
+  <summary>Formula summary</summary>
+  <div class="formula-grid">
+    <p><strong>Movement ratio</strong><span>Units sold ÷ current stock × 100</span></p>
+    <p><strong>Average daily sales</strong><span>Units sold ÷ analysis days</span></p>
+    <p><strong>Estimated days to clear</strong><span>Current stock ÷ average daily sales</span></p>
+    <p><strong>Estimated months to clear</strong><span>Estimated days ÷ 30</span></p>
+    <p><strong>Expiry risk</strong><span>Projected cumulative sales compared with stock expiring at each date</span></p>
+  </div>
+</details>
+{% endblock %}

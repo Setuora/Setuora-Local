@@ -1,0 +1,21 @@
+{% macro sales_ledger_editor(value='', ledger_list_id='') %}
+<details
+  class="ledger-mapping-editor"
+  data-ledger-mapping-editor
+  {% if ledger_list_id %}data-ledger-list-id="{{ ledger_list_id }}"{% endif %}
+  {{ 'open' if value else '' }}
+>
+  <summary><span data-ledger-summary>Add product ledger</span></summary>
+  <input type="hidden" name="sales_gst_ledger_mappings" value="{{ value }}">
+  <p class="muted ledger-mapping-help">
+    Add one ledger set for each product GST rate.
+  </p>
+  <div class="ledger-mapping-list" data-ledger-mapping-list></div>
+  <div class="ledger-mapping-empty" data-ledger-mapping-empty>
+    No product ledgers added yet.
+  </div>
+  <button class="button small secondary" type="button" data-add-ledger-mapping>
+    Add product ledger
+  </button>
+</details>
+{% endmacro %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Sync attempt - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ batch.batch_number }}</p>
+    <h1>Sync attempt</h1>
+  </div>
+  {% if role_can_view_batch(user, batch.batch_type) %}
+  <a class="button" href="/batches/{{ batch.id }}">Back to batch</a>
+  {% endif %}
+</section>
+
+<section class="panel narrow">
+  <dl class="details">
+    <dt>Status</dt><dd><span class="status {{ attempt.status|lower }}">{{ attempt.status }}</span></dd>
+    <dt>Created</dt><dd>{{ attempt.created_at.strftime('%d %b %Y %H:%M') }}</dd>
+    <dt>Error</dt><dd>{{ attempt.error or '-' }}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Request XML</h2></div>
+  <pre class="xml-preview">{{ attempt.request_xml or '-' }}</pre>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Response XML</h2></div>
+  <pre class="xml-preview">{{ attempt.response_xml or '-' }}</pre>
+</section>
+{% endblock %}

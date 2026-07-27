@@ -1,0 +1,14 @@
+{% for row in report.audit_batches %}
+<tr>
+  <td><a class="button primary director-open" href="/reports/audit-batches/{{ row.id }}">Open</a></td>
+  <td><strong>{{ row.batch_number }}</strong></td>
+  <td>{{ report_date(row.audit_at) }}</td>
+  <td>{{ row.audited_by }}</td>
+  <td>{{ row.products }}</td>
+  <td><span class="status {{ 'pending_sync' if row.pending else 'synced' }}">{{ row.pending }}</span></td>
+  <td><span class="status {{ 'missing' if row.missing else 'synced' }}">{{ row.missing }}</span></td>
+  <td><span class="status {{ 'extra' if row.extra else 'synced' }}">{{ row.extra }}</span></td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="empty">No audit batches found</td></tr>
+{% endfor %}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login - Setuora</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css?v=20260710-table-fonts-3">
+</head>
+<body class="auth-body">
+  <main class="auth-shell">
+    <section class="auth-panel">
+      <div>
+        <h1>Setuora Barcode Tally Bridge</h1>
+        <p class="muted" style="margin-top:8px">Sign in to scan stock and sync with Tally.</p>
+      </div>
+      {% if error %}
+      <div class="alert error">{{ error }}</div>
+      {% endif %}
+      {% if message %}
+      <div class="alert">{{ message }}</div>
+      {% endif %}
+      <form method="post" action="/login" class="stack">
+        <label>Username<input name="username" autocomplete="username" required autofocus></label>
+        <label>Password
+          <span class="password-field" data-password-field>
+            <input name="password" type="password" autocomplete="current-password" required>
+            <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+          </span>
+        </label>
+        <button class="button primary full" type="submit">Login</button>
+      </form>
+    </section>
+  </main>
+  <script src="/static/password-toggle.js?v=20260624-expiry-1"></script>
+</body>
+</html>

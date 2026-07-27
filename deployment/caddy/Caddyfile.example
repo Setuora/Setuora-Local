@@ -1,0 +1,5 @@
+https://setuora.local {
+	tls internal
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8000
+}

@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Maintenance - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>Maintenance</h1>
+  </div>
+  {% if role_can(user, 'backup_download') %}
+  <a class="button primary" href="/maintenance/backup.db">Download backup</a>
+  {% endif %}
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert success">{{ success }}</div>{% endif %}
+
+<section class="panel">
+  <div class="section-title"><h2>Backup</h2></div>
+  <dl class="details">
+    <dt>Database</dt><dd>{{ database_path }}</dd>
+    <dt>Format</dt><dd>SQLite database copy</dd>
+    <dt>Automatic backups</dt><dd>{{ 'Enabled' if backup_status.enabled else 'Disabled' }}</dd>
+    <dt>Backup folder</dt><dd>{{ backup_status.directory }}</dd>
+    <dt>Schedule</dt><dd>Every {{ backup_status.interval_hours }} hour{{ '' if backup_status.interval_hours == 1 else 's' }}</dd>
+    <dt>Retention</dt><dd>Last {{ backup_status.retention_count }} verified backup{{ '' if backup_status.retention_count == 1 else 's' }}</dd>
+    <dt>Latest backup</dt><dd>{{ backup_status.latest_backup or 'Not created yet' }}</dd>
+    <dt>Off-machine copy</dt><dd>{{ backup_status.offsite_directory or 'Not configured' }}</dd>
+    {% if backup_status.offsite_directory %}
+    <dt>Latest off-machine backup</dt><dd>{{ backup_status.offsite_latest_backup or 'Not copied yet' }}</dd>
+    {% endif %}
+  </dl>
+  <p class="muted">The backup uses SQLite's backup API, so pending WAL changes are included in the downloaded file.</p>
+  <p class="muted">Each automatic backup is opened and checked with SQLite integrity and foreign-key verification before it is kept.</p>
+  <p class="muted">Configure BACKUP_OFFSITE_DIRECTORY for a verified copy on another drive or network share. Keep a separate copy of .env.</p>
+</section>
+
+{% if has_role(user, 'super_admin') and role_can(user, 'database_reset') %}
+<section class="panel">
+  <div class="section-title"><h2>Backup settings</h2></div>
+  <form method="post" action="/maintenance/backup-settings" class="stack">
+    <label class="checkline">
+      <input type="checkbox" name="automatic_backups_enabled" value="true" {{ 'checked' if backup_status.enabled else '' }}>
+      Automatic backups
+    </label>
+    <div class="backup-settings-grid">
+      <label>Backup folder
+        <input name="backup_directory" value="{{ backup_config.backup_directory }}" required>
+      </label>
+      <label>Off-machine copy
+        <input name="backup_offsite_directory" value="{{ backup_config.backup_offsite_directory }}" placeholder="Drive path or network share">
+      </label>
+      <label>Schedule
+        <input name="backup_interval_hours" type="number" min="1" max="168" step="1" value="{{ backup_config.backup_interval_hours }}" required>
+      </label>
+      <label>Retention
+        <input name="backup_retention_count" type="number" min="1" max="365" step="1" value="{{ backup_config.backup_retention_count }}" required>
+      </label>
+    </div>
+    <div class="save-row">
+      <button class="button primary" type="submit">Save backup settings</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Import backup</h2></div>
+  <div class="backup-import-grid">
+    <form method="post" action="/maintenance/restore-existing" class="backup-import-form" onsubmit="return confirm('Import this backup now? Current data will be replaced after a safety backup is created.');">
+      <h3>From backup folder</h3>
+      <label>Previous backup
+        <select name="selected_backup" required {{ 'disabled' if not backup_status.backup_files else '' }}>
+          {% if backup_status.backup_files %}
+            {% for backup_file in backup_status.backup_files %}
+            <option value="{{ backup_file }}">{{ backup_file.name }} - {{ backup_file }}</option>
+            {% endfor %}
+          {% else %}
+            <option value="">No backups found</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>Super admin password
+        <span class="password-field" data-password-field>
+          <input name="super_admin_password" type="password" autocomplete="current-password" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirmation
+        <input name="confirm_restore" required placeholder="Type IMPORT">
+      </label>
+      <button class="button danger" type="submit" {{ 'disabled' if not backup_status.backup_files else '' }}>Import selected backup</button>
+    </form>
+
+    <form method="post" action="/maintenance/restore-upload" enctype="multipart/form-data" class="backup-import-form backup-import-form--upload" onsubmit="return confirm('Import this uploaded backup now? Current data will be replaced after a safety backup is created.');">
+      <h3>Upload backup file</h3>
+      <label>Backup file
+        <input name="upload" type="file" accept=".db,application/octet-stream" required>
+      </label>
+      <label>Super admin password
+        <span class="password-field" data-password-field>
+          <input name="super_admin_password" type="password" autocomplete="current-password" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirmation
+        <input name="confirm_restore" required placeholder="Type IMPORT">
+      </label>
+      <button class="button danger" type="submit">Import uploaded backup</button>
+    </form>
+  </div>
+  <p class="muted">Import verifies the backup, creates a safety backup of the current database, replaces the SQLite database, and then signs you out.</p>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Reset database</h2></div>
+  <div class="product-danger-zone">
+    <div>
+      <strong>Clear database and cache</strong>
+      <p>This keeps your super admin account and removes users, products, serials, batches, reports, settings, logs, and cached application state.</p>
+    </div>
+    <form method="post" action="/maintenance/reset" class="stack" onsubmit="return confirm('Clear and reset the database now? This cannot be undone.');">
+      <label>Super admin password
+        <span class="password-field" data-password-field>
+          <input name="super_admin_password" type="password" autocomplete="current-password" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirmation
+        <input name="confirm_reset" required placeholder="Type RESET">
+      </label>
+      <button class="button danger full" type="submit">Clear and reset database</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="section-title"><h2>Restore procedure</h2></div>
+  <div class="checklist">
+    <div>Use Import backup above for a verified in-app restore from an existing backup.</div>
+    <div>For a manual restore, stop the Setuora Windows service or FastAPI server.</div>
+    <div>Copy the current data folder to a safe location before replacing the database.</div>
+    <div>Replace the database at <strong>{{ database_path }}</strong> with the downloaded backup file.</div>
+    <div>Start the Setuora service again and log in as admin.</div>
+    <div>Open Dashboard, Products, and Reports to confirm the restored data is visible.</div>
+  </div>
+</section>
+<script src="/static/password-toggle.js"></script>
+{% endblock %}

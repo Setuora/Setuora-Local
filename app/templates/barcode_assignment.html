@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Barcode Assignment - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Existing stock</p>
+    <h1>Barcode Assignment</h1>
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<section class="split">
+  <div class="panel">
+    <div class="section-title"><h2>Assign to product</h2></div>
+    {% if not products %}
+    <div class="alert warn">No products are enabled for QR assignment.</div>
+    {% endif %}
+    <form method="post" action="/barcode-assignment/generate" class="stack">
+      <label>Search product
+        <input id="assignment-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name">
+      </label>
+      <label>Existing product
+        <select name="product_id" id="assignment-product-select" required {{ 'disabled' if not products else '' }}>
+          {% for product in products %}
+          <option
+            value="{{ product.id }}"
+            data-search="{{ product.product_code }} {{ product.product_name }} {{ product.nickname or '' }} {{ product.tally_stock_item_name }} {{ product.alternate_tally_stock_item_name or '' }}"
+          >{{ product.product_code }} - {{ product.product_name }}{% if product.nickname %} ({{ product.nickname }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="two-col">
+        <label>Quantity<input name="quantity" type="number" min="1" max="5000" placeholder="How many" required></label>
+        <label>Serial prefix<input name="prefix" placeholder="Uses product code"></label>
+      </div>
+      <label>Start as
+        <select name="initial_status">
+          <option value="GENERATED">Unassigned (purchase / future stock)</option>
+          <option value="IN_STOCK" selected>Existing stock</option>
+        </select>
+      </label>
+      <div class="two-col">
+        <label>Batch number<input name="product_batch_number" placeholder="Optional"></label>
+        <label>Warehouse<input name="warehouse" placeholder="Optional"></label>
+      </div>
+      <label>Warehouse level
+        <select name="warehouse_level">
+          {% for level in warehouse_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="two-col">
+        <label>Mfg date<input name="mfg_date" type="date"></label>
+        <label>Product expiry<input name="expiry_date" type="date"></label>
+      </div>
+      <label>Notes<textarea name="notes" rows="3"></textarea></label>
+      <button class="button primary full" type="submit" {{ 'disabled' if not products else '' }}>Generate QR labels</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="section-title"><h2>Bulk assignment</h2></div>
+    <form method="post" action="/barcode-assignment/bulk" enctype="multipart/form-data" class="stack">
+      <label>Excel file<input name="upload" type="file" accept=".xlsx" required></label>
+      <p class="muted">Accepted: Product Code/Product Name + Quantity; optional HSN, GST, SGST, IGST. Tally invoice exports with Description of Goods work too.</p>
+      <label>Notes<textarea name="notes" rows="3"></textarea></label>
+      <button class="button primary full" type="submit">Upload and generate</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Recent assignments</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Batch</th><th>Source</th><th>Items</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        {% for batch in batches %}
+        <tr>
+          <td>{{ batch.batch_number }}</td>
+          <td>{{ batch.reason_code or '-' }}</td>
+          <td>{{ batch.items|length }}</td>
+          <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td><a href="/barcode-assignment/{{ batch.id }}">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No assignments yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    const input = document.getElementById("assignment-product-search");
+    const select = document.getElementById("assignment-product-select");
+    if (!input || !select) return;
+    const options = Array.from(select.options);
+
+    function syncProductOptions() {
+      const query = input.value.trim().toLowerCase();
+      let firstVisible = null;
+      options.forEach((option) => {
+        const matches = !query || (option.dataset.search || option.textContent || "").toLowerCase().includes(query);
+        option.hidden = !matches;
+        if (matches && !firstVisible) firstVisible = option;
+      });
+      if (select.selectedOptions[0]?.hidden && firstVisible) {
+        select.value = firstVisible.value;
+      }
+    }
+
+    input.addEventListener("input", syncProductOptions);
+    syncProductOptions();
+  })();
+</script>
+{% endblock %}

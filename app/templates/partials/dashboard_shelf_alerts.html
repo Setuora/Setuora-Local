@@ -1,0 +1,32 @@
+<section class="panel" data-live-shelf-alerts>
+  <div class="section-title">
+    <h2>Shelf verification alerts</h2>
+    <span>{{ shelf_alerts|length }} incomplete batch{{ '' if shelf_alerts|length == 1 else 'es' }}</span>
+  </div>
+  {% if shelf_alerts %}
+  <div class="alert warn">
+    These purchase/audit batches cannot be completed until their pending products are verified with a shelf QR.
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Batch</th><th>Created by</th><th>Pending products</th><th>State</th></tr></thead>
+      <tbody>
+        {% for alert in shelf_alerts %}
+        <tr>
+          <td><a href="/batches/{{ alert.batch.id }}">{{ alert.batch.batch_number }}</a></td>
+          <td>{{ alert.batch.user.username }}</td>
+          <td>{{ alert.pending_count }}</td>
+          <td>
+            <span class="status {{ 'failed' if alert.shelf_required else 'pending_sync' }}">
+              {{ 'SHELF DUE' if alert.shelf_required else 'INCOMPLETE' }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No batches are waiting for shelf verification.</div>
+  {% endif %}
+</section>

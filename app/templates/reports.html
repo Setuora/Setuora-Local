@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Reports - Setuora{% endblock %}
+{% block content %}
+{% set audit_excel_fields = "Audit Date|Audit Batch|Audited By|Products|Verified|Missing|Extra|Total|Pending|Product Code|Product Name|Audit Batches|Finding|Serial|Expected Status|Scanned Status" %}
+{% set missing_excel_fields = "Audit Date|Audited By|Audit Batch|Serial|Product Code|Product Name|Product Batch|Warehouse|Storage Location|Mfg Date|Expiry Date|Expected Status" %}
+{% set transaction_excel_fields = "Date|User|Type|Serial|Product Code|Product Name|Invoice Created By|Barcode Sold By|Product Audited By|From Status|To Status|Reason|Batch/Reference|Tally Reference|Notes" %}
+{% set scan_excel_fields = "Date|User|Action|Serial|Status|Batch|Message|Tally Reference" %}
+<div class="reports-page">
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Audit trail</p>
+    <h1>Reports</h1>
+  </div>
+  {% if role_can(user, 'reports_export') %}
+  <div class="actions">
+    <a class="button" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Audit reconciliation Excel</a>
+    {% if action == 'MISSING' %}
+    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Missing stock Excel</a>
+    {% else %}
+    <a class="button" href="{{ transaction_export_url }}" data-xlsx-export data-xlsx-title="Customize transaction export" data-xlsx-parameters="action|product_id|start|end" data-xlsx-fields="{{ transaction_excel_fields }}">Transactions Excel</a>
+    <a class="button" href="{{ scan_export_url }}" data-xlsx-export data-xlsx-title="Customize scan export" data-xlsx-parameters="action|product_id|start|end" data-xlsx-fields="{{ scan_excel_fields }}">Scans Excel</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <form method="get" class="filters reports-filters">
+    <label>Action
+      <select name="action">
+        <option value="">All</option>
+        {% for value in transaction_types %}
+        <option value="{{ value }}" {{ 'selected' if action == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Product
+      <select name="product_id">
+        <option value="">All products</option>
+        {% for product in products %}
+        <option value="{{ product.id }}" {{ 'selected' if product_id == product.id else '' }}>{{ product.product_code }} - {{ product.product_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From<input name="start" type="date" value="{{ start }}"></label>
+    <label>To<input name="end" type="date" value="{{ end }}"></label>
+    <button class="button" type="submit">Apply</button>
+  </form>
+</section>
+
+<section class="chart-grid">
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Transaction mix</h2>
+        <p>{{ selected_product.product_code if selected_product else 'Current filters' }}</p>
+      </div>
+      <strong>{{ transaction_chart.total }}</strong>
+    </div>
+    <div class="bar-list">
+      {% for item in transaction_chart.bars %}
+      <div class="bar-row">
+        <span>{{ item.label }}</span>
+        <div class="bar-track"><span class="bar-fill" style="--bar: {{ item.percent }}%; --bar-color: {{ item.color }};"></span></div>
+        <strong>{{ item.value }}</strong>
+      </div>
+      {% else %}
+      <p class="chart-empty">No transactions found</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="chart-card chart-card--donut">
+    <div class="chart-head">
+      <div>
+        <h2>Scan outcomes</h2>
+        <p>{{ selected_product.product_code if selected_product else 'Current filters' }}</p>
+      </div>
+    </div>
+    <div class="chart-body">
+      <div class="donut" style="--chart-bg: {{ scan_status_chart.gradient }};" aria-label="Scan outcomes chart">
+        <span>{{ scan_status_chart.total }}</span>
+      </div>
+      <div class="chart-legend">
+        {% for item in scan_status_chart.slices %}
+        <div class="legend-row">
+          <span class="swatch" style="--swatch: {{ item.color }};"></span>
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </div>
+        {% else %}
+        <p class="chart-empty">No scan records</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include "partials/expiry_summary.html" %}
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Audit assignments</h2>
+    <span>{{ audit_assignments|length }} total</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Product</th><th>Auditor</th><th>Status</th><th>Expected</th><th>Found</th><th>Remaining</th><th></th></tr></thead>
+      <tbody>
+        {% for row in audit_assignments %}
+        {% set assignment = row.assignment %}
+        {% set latest_batch = row.latest_batch %}
+        <tr>
+          <td>
+            <strong>{{ assignment.product.product_name }}</strong>
+            <small>{{ assignment.product.product_code }}</small>
+          </td>
+          <td>{{ assignment.auditor.username }}</td>
+          <td><span class="status {{ row.progress.state|lower }}">{{ row.progress.state }}</span></td>
+          <td>{{ row.progress.expected }}</td>
+          <td>{{ row.progress.verified }}</td>
+          <td>{{ row.progress.pending }}</td>
+          <td>
+            {% if latest_batch and role_can_view_batch(user, latest_batch.batch_type) %}
+            <a class="button small" href="/batches/{{ latest_batch.id }}">Open audit</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No audit assignments found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Transactions</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>User</th><th>Type</th><th>Serial</th><th>Product</th><th>Invoice created by</th><th>Barcode sold by</th><th>Product audited by</th><th>Status</th><th>Tally</th></tr></thead>
+      <tbody>
+        {% for txn in transactions %}
+        <tr>
+          <td>{{ report_date(txn.created_at) }}</td>
+          <td>{{ txn.user.username }}</td>
+          <td>{{ txn.transaction_type }}</td>
+          <td>{% if txn.serial %}<a href="/serials/{{ txn.serial.id }}">{{ txn.serial_number }}</a>{% else %}{{ txn.serial_number or '-' }}{% endif %}</td>
+          <td>{{ txn.product.product_code if txn.product else '-' }}</td>
+          <td>{{ invoice_created_by(txn) or '-' }}</td>
+          <td>{{ barcode_sold_by(txn) or '-' }}</td>
+          <td>{{ product_audited_by(txn) or '-' }}</td>
+          <td>{{ txn.status_from or '-' }} &rarr; {{ txn.status_to or '-' }}</td>
+          <td>{{ txn.tally_reference or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty">No transactions found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if not action or action == 'MISSING' %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Missing stock</h2>
+    <span>Items not found during audit · current filters</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Audited by</th><th>Serial</th><th>Product</th><th>Audit batch</th><th>Expected status</th></tr></thead>
+      <tbody>
+        {% for finding in missing_stock %}
+        <tr>
+          <td>{{ report_date(finding.created_at) }}</td>
+          <td>{{ finding.batch.user.username }}</td>
+          <td>{% if finding.serial %}<a href="/serials/{{ finding.serial.id }}">{{ finding.serial_number }}</a>{% else %}{{ finding.serial_number }}{% endif %}</td>
+          <td>
+            <strong>{{ finding.product_code or '-' }}</strong>
+            <small>{{ finding.product_name or '-' }}</small>
+          </td>
+          <td>
+            {% if role_can_view_batch(user, finding.batch.batch_type) %}
+            <a href="/batches/{{ finding.batch.id }}">{{ finding.batch.batch_number }}</a>
+            {% else %}
+            {{ finding.batch.batch_number }}
+            {% endif %}
+          </td>
+          <td>{{ finding.expected_status or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No missing stock found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if losses %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Losses</h2>
+    <span>Recorded stock rate before GST · current filters</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Loss due to</th><th>Quantity</th><th>Value</th></tr></thead>
+      <tbody>
+        {% for loss in losses.rows %}
+        <tr>
+          <td>{{ loss.label }}</td>
+          <td>{{ loss.quantity }}</td>
+          <td>Rs {{ '%.2f'|format(loss.value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th>Total loss</th><th>{{ losses.total_quantity }}</th><th>Rs {{ '%.2f'|format(losses.total_value) }}</th></tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="split reports-activity-grid">
+  <div class="panel split-card reports-activity-card">
+    <div class="section-title"><h2>Scans</h2></div>
+    <div class="table-scroll reports-activity-scroll">
+      <table class="reports-activity-table reports-scans-table">
+        <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Serial</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for scan in scans %}
+          <tr>
+            <td>{{ report_date(scan.created_at) }}</td>
+            <td>{{ scan.user.username }}</td>
+            <td>{{ scan.action }}</td>
+            <td>{{ scan.serial_number_raw }}</td>
+            <td><span class="status {{ scan.status|lower }}">{{ scan.status }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No scan records</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel split-card reports-activity-card">
+    <div class="section-title"><h2>Pending sync</h2></div>
+    <div class="table-scroll reports-activity-scroll">
+      <table class="reports-activity-table reports-pending-table">
+        <thead><tr><th>Batch</th><th>Status</th><th>Retries</th><th>Last retry</th><th>Error</th></tr></thead>
+        <tbody>
+          {% for batch in pending %}
+          <tr>
+            <td>
+              {% if role_can_view_batch(user, batch.batch_type) %}
+              <a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a>
+              {% else %}
+              {{ batch.batch_number }}
+              {% endif %}
+            </td>
+            <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
+            <td>{{ batch.retry_count or 0 }}</td>
+            <td>{{ report_date(batch.last_retry_at) or '-' }}</td>
+            <td>{{ batch.last_error or '-' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No pending sync</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+{% endblock %}

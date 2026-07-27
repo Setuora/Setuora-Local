@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Warehouse Map - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Live inventory placement</p>
+    <h1>Warehouse map</h1>
+  </div>
+  <div class="actions">
+    {% if role_can(user, 'stock_relocation') %}<a class="button primary" href="/warehouse/move">Move stock</a>{% endif %}
+    {% if role_can(user, 'location_manage') %}<a class="button" href="/warehouse/locations">Storage locations</a>{% endif %}
+  </div>
+</section>
+
+<section class="metric-grid audit-grid">
+  <div class="metric"><span>Total locations</span><strong>{{ total_locations }}</strong></div>
+  <div class="metric"><span>Active locations</span><strong>{{ active_locations }}</strong></div>
+  <div class="metric"><span>Units placed</span><strong>{{ total_units }}</strong></div>
+</section>
+
+<section class="warehouse-map-grid">
+  {% for row in rows %}
+  {% set location = row.location %}
+  <article class="location-card {{ 'is-inactive' if not location.active else '' }}">
+    <div class="location-card__head">
+      <div><span>{{ location.warehouse }}</span><strong>{{ location.code }}</strong></div>
+      <span class="status {{ 'synced' if location.active else 'failed' }}">{{ 'ACTIVE' if location.active else 'INACTIVE' }}</span>
+    </div>
+    <div class="location-path">
+      <span>Zone <strong>{{ location.zone }}</strong></span>
+      <span>Section <strong>{{ location.section }}</strong></span>
+      <span>Rack <strong>{{ location.rack }}</strong></span>
+      <span>Shelf <strong>{{ location.shelf }}</strong></span>
+      <span>Bin <strong>{{ location.bin }}</strong></span>
+    </div>
+    <div class="location-card__qty"><strong>{{ row.quantity }}</strong><span>units currently stored</span></div>
+  </article>
+  {% else %}
+  <p class="empty">No storage locations configured.</p>
+  {% endfor %}
+</section>
+{% endblock %}

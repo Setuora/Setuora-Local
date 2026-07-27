@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Role Access - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Settings</p>
+    <h1>Role Access</h1>
+  </div>
+  <div class="actions">
+    {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}
+    <a class="button" href="/settings">Settings</a>
+    {% endif %}
+    {% if role_can(user, 'page_users') and role_can(user, 'users_manage') %}
+    <a class="button" href="/users">Users</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Current permission map</h2>
+  </div>
+  <p class="muted">Change which pages are shown, which actions each role can perform, and what data each role can view or modify. Super admin stays enabled as the recovery role.</p>
+</section>
+
+{% set access_rows = namespace(total=0) %}
+{% for section in sections %}
+{% set access_rows.total = access_rows.total + section.rows|length %}
+{% endfor %}
+
+<form method="post" action="/settings/access" class="stack">
+<div class="access-matrix-scroll {{ 'access-matrix-scroll--limited' if access_rows.total > 10 else '' }}" data-access-row-count="{{ access_rows.total }}">
+{% for section in sections %}
+<section class="panel access-section">
+  <div class="section-title">
+    <h2>{{ section.title }}</h2>
+  </div>
+  <div class="access-table-scroll">
+    <table class="access-table">
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>{{ section.context_heading }}</th>
+          {% for role in roles %}
+          <th>{{ role.label }}</th>
+          {% endfor %}
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in section.rows %}
+        <tr>
+          <td><strong>{{ row.item }}</strong></td>
+          <td>{{ row.context }}</td>
+          {% for role in roles %}
+          {% set cell = row.cells[loop.index0] %}
+          <td>
+            {% if role.key == 'super_admin' or row.key in ['page_role_access', 'role_access_edit', 'tally_excel_export'] %}
+            <span class="status {{ cell.tone }}">{{ cell.label }}</span>
+            {% else %}
+            <select class="access-select access-native-select access-select--{{ cell.tone }}" name="access__{{ row.key }}__{{ role.key }}" aria-label="{{ row.item }} for {{ role.label }}" data-access-picker>
+              {% for option in cell.options %}
+              <option value="{{ option.value }}" {{ 'selected' if option.value == cell.value else '' }}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td>{{ row.note or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+</div>
+<div class="save-row access-save">
+  <button class="button primary" type="submit">Save role access</button>
+  <a class="button" href="/settings/access">Reset unsaved changes</a>
+</div>
+</form>
+<script nonce="{{ csp_nonce(request) }}">
+  (() => {
+    const toneByValue = {
+      shown: "synced",
+      hidden: "failed",
+      edit: "synced",
+      yes: "synced",
+      view: "generated",
+      workflow: "pending_sync",
+      no: "failed",
+    };
+    const selects = Array.from(document.querySelectorAll("[data-access-picker]"));
+    if (!selects.length) return;
+
+    document.documentElement.classList.add("access-picker-ready");
+    let openPicker = null;
+
+    function toneFor(value) {
+      return toneByValue[value] || "generated";
+    }
+
+    function closePicker() {
+      if (!openPicker) return;
+      openPicker.classList.remove("is-open", "opens-up");
+      openPicker.button.setAttribute("aria-expanded", "false");
+      openPicker = null;
+    }
+
+    function syncPicker(picker) {
+      const selected = picker.select.options[picker.select.selectedIndex];
+      const tone = toneFor(picker.select.value);
+      picker.button.textContent = selected ? selected.textContent : "";
+      picker.button.className = `access-picker__button access-picker__button--${tone}`;
+      picker.items.forEach((item) => {
+        const isSelected = item.dataset.value === picker.select.value;
+        item.setAttribute("aria-selected", isSelected ? "true" : "false");
+        item.classList.toggle("is-selected", isSelected);
+      });
+    }
+
+    function openMenu(picker) {
+      if (openPicker && openPicker !== picker) closePicker();
+      picker.classList.remove("opens-up");
+      picker.classList.add("is-open");
+      picker.button.setAttribute("aria-expanded", "true");
+      openPicker = picker;
+
+      const scrollContainer = picker.closest(".access-matrix-scroll--limited");
+      const boundary = scrollContainer
+        ? scrollContainer.getBoundingClientRect()
+        : { top: 0, bottom: window.innerHeight };
+      const buttonBounds = picker.button.getBoundingClientRect();
+      const menuHeight = picker.menu.offsetHeight;
+      const roomAbove = buttonBounds.top - Math.max(boundary.top, 0);
+      const roomBelow = Math.min(boundary.bottom, window.innerHeight) - buttonBounds.bottom;
+      picker.classList.toggle("opens-up", roomBelow < menuHeight + 7 && roomAbove > roomBelow);
+
+      const selectedItem = picker.items.find((item) => item.dataset.value === picker.select.value);
+      if (selectedItem) selectedItem.focus({ preventScroll: true });
+    }
+
+    selects.forEach((select, index) => {
+      const picker = document.createElement("span");
+      picker.className = "access-picker";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("aria-haspopup", "listbox");
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-label", select.getAttribute("aria-label") || "Role access option");
+
+      const menu = document.createElement("span");
+      menu.className = "access-picker__menu";
+      menu.id = `access-picker-${index}`;
+      menu.setAttribute("role", "listbox");
+      button.setAttribute("aria-controls", menu.id);
+
+      const items = Array.from(select.options).map((option) => {
+        const item = document.createElement("button");
+        const tone = toneFor(option.value);
+        item.type = "button";
+        item.className = `access-picker__option access-picker__option--${tone}`;
+        item.dataset.value = option.value;
+        item.setAttribute("role", "option");
+        item.textContent = option.textContent;
+        item.addEventListener("click", () => {
+          select.value = option.value;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          syncPicker(picker);
+          closePicker();
+          button.focus();
+        });
+        menu.appendChild(item);
+        return item;
+      });
+
+      picker.select = select;
+      picker.button = button;
+      picker.menu = menu;
+      picker.items = items;
+      picker.append(button, menu);
+      select.after(picker);
+      syncPicker(picker);
+
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (picker.classList.contains("is-open")) {
+          closePicker();
+        } else {
+          openMenu(picker);
+        }
+      });
+
+      button.addEventListener("keydown", (event) => {
+        if (["ArrowDown", "Enter", " "].includes(event.key)) {
+          event.preventDefault();
+          openMenu(picker);
+        }
+      });
+
+      menu.addEventListener("keydown", (event) => {
+        const currentIndex = items.indexOf(document.activeElement);
+        if (event.key === "Escape") {
+          closePicker();
+          button.focus();
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          items[(currentIndex + 1) % items.length].focus();
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          items[(currentIndex - 1 + items.length) % items.length].focus();
+        }
+      });
+    });
+
+    document.addEventListener("click", closePicker);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closePicker();
+    });
+    document.querySelectorAll(".access-matrix-scroll, .access-table-scroll").forEach((container) => {
+      container.addEventListener("scroll", closePicker, { passive: true });
+    });
+  })();
+</script>
+{% endblock %}

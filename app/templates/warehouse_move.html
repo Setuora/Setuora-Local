@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Move Stock - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Warehouse</p>
+    <h1>Move stock</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/warehouse/map">Warehouse map</a>
+    <a class="button" href="/warehouse/history">Movement history</a>
+  </div>
+</section>
+
+{% if not locations %}
+<div class="alert error">
+  No active storage locations are available.
+  {% if role_can(user, 'location_manage') %}<a href="/warehouse/locations">Create a location</a>.{% endif %}
+</div>
+{% endif %}
+
+<div id="relocation-alert" class="alert" hidden></div>
+
+<section class="warehouse-workflow" data-locations='{{ locations_data|tojson }}'>
+  <article class="panel relocation-step">
+    <div class="step-heading">
+      <span class="step-number">1</span>
+      <div><h2>Identify stock</h2><p>Scan a product label or search by product ID, SKU, serial, product name, or batch.</p></div>
+    </div>
+    <form id="stock-search-form" class="search">
+      <input id="stock-search" name="q" autocomplete="off" placeholder="Scan or enter SKU, serial, product name, or batch" required>
+      <button class="button primary" type="submit">Find stock</button>
+      <button class="button secondary" type="button" data-open-scanner="product">Scan product</button>
+    </form>
+    <div id="search-results" class="relocation-results">
+      <p class="empty">Search for stock to begin.</p>
+    </div>
+  </article>
+
+  <article class="panel relocation-step">
+    <div class="step-heading">
+      <span class="step-number">2</span>
+      <div><h2>Move quantity</h2><p>Add one or several products. Each line can move all available stock or a partial quantity.</p></div>
+    </div>
+    <div class="table-scroll relocation-basket-scroll">
+      <table>
+        <thead><tr><th>Product</th><th>Batch</th><th>From</th><th>Available</th><th>Move</th><th></th></tr></thead>
+        <tbody id="move-items"><tr><td colspan="6" class="empty">No stock added yet</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel relocation-step">
+    <div class="step-heading">
+      <span class="step-number">3</span>
+      <div><h2>Destination</h2><p>Choose the location hierarchy or scan its QR code.</p></div>
+    </div>
+    <div class="destination-scan">
+      <input id="destination-code" autocomplete="off" placeholder="Scan or type destination location code">
+      <button class="button" type="button" id="destination-lookup">Use code</button>
+      <button class="button secondary" type="button" data-open-scanner="destination">Scan location</button>
+    </div>
+    <div class="location-hierarchy">
+      <label>Warehouse<select data-location-level="warehouse"><option value="">Select warehouse</option></select></label>
+      <label>Zone<select data-location-level="zone" disabled><option value="">Select zone</option></select></label>
+      <label>Section<select data-location-level="section" disabled><option value="">Select section</option></select></label>
+      <label>Rack<select data-location-level="rack" disabled><option value="">Select rack</option></select></label>
+      <label>Shelf<select data-location-level="shelf" disabled><option value="">Select shelf</option></select></label>
+      <label>Bin<select data-location-level="bin" disabled><option value="">Select bin</option></select></label>
+    </div>
+    <input id="destination-id" type="hidden">
+    <div id="destination-summary" class="destination-summary">No destination selected</div>
+  </article>
+
+  <article class="panel relocation-step">
+    <div class="step-heading">
+      <span class="step-number">4</span>
+      <div><h2>Confirm move</h2><p>The stock location and permanent audit history update immediately.</p></div>
+    </div>
+    <label>Reason <span class="muted">(optional)</span>
+      <textarea id="move-reason" rows="2" maxlength="500" placeholder="Reorganization, picking optimization, cycle count correction..."></textarea>
+    </label>
+    <div class="confirm-relocation">
+      <p id="move-summary">Add stock and choose a destination.</p>
+      <button class="button success" id="confirm-relocation" type="button" disabled>Confirm relocation</button>
+    </div>
+  </article>
+</section>
+
+<dialog id="warehouse-scanner" class="modal scanner-modal">
+  <div class="modal__head">
+    <div><h2>Scan code</h2><small class="muted" id="warehouse-scanner-help">Point the camera at a QR code or barcode.</small></div>
+    <button class="button ghost modal__close" id="warehouse-scanner-close" type="button" aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    <div class="scanner-box"><video id="warehouse-scanner-video" playsinline muted></video><div class="scan-line"></div></div>
+    <p id="warehouse-scanner-status" class="muted">Camera is off</p>
+  </div>
+</dialog>
+
+<script src="/static/zxing.min.js"></script>
+<script src="/static/warehouse-move.js?v=20260627-1"></script>
+{% endblock %}

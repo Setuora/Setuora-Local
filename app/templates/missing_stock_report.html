@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Missing Stock Report - Setuora{% endblock %}
+{% block content %}
+{% set missing_excel_fields = "Audit Date|Audited By|Audit Batch|Serial|Product Code|Product Name|Product Batch|Warehouse|Storage Location|Mfg Date|Expiry Date|Expected Status" %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Audit exceptions</p>
+    <h1>Missing stock report</h1>
+    <p>Serial-level stock that was expected but not found during an audit.</p>
+  </div>
+  {% if role_can(user, 'reports_export') %}
+  <div class="actions">
+    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Export Excel</a>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <form method="get" class="filters missing-stock-filters">
+    <label>Product
+      <select name="product_id">
+        <option value="">All products</option>
+        {% for product in products %}
+        <option value="{{ product.id }}" {{ 'selected' if product_id == product.id else '' }}>{{ product.product_code }} - {{ product.product_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From<input name="start" type="date" value="{{ start }}"></label>
+    <label>To<input name="end" type="date" value="{{ end }}"></label>
+    <button class="button primary" type="submit">Apply</button>
+    <a class="button" href="/reports/missing-stock">Clear</a>
+  </form>
+</section>
+
+<section class="metric-grid">
+  <div class="metric danger"><span>Missing serials</span><strong>{{ summary.total }}</strong></div>
+  <div class="metric"><span>Affected products</span><strong>{{ summary.products }}</strong></div>
+  <div class="metric"><span>Audit batches</span><strong>{{ summary.audit_batches }}</strong></div>
+  <div class="metric"><span>Warehouses</span><strong>{{ summary.warehouses }}</strong></div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Missing stock details</h2>
+    <span>Newest audit finding first · up to 500 rows</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Audit date</th>
+          <th>Audited by</th>
+          <th>Serial</th>
+          <th>Product</th>
+          <th>Audit batch</th>
+          <th>Product batch</th>
+          <th>Warehouse / location</th>
+          <th>Mfg / expiry</th>
+          <th>Expected status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for finding in findings %}
+        {% set serial = finding.serial %}
+        <tr>
+          <td>{{ report_date(finding.created_at) }}</td>
+          <td>{{ finding.batch.user.username }}</td>
+          <td>
+            {% if serial %}
+            <a href="/serials/{{ serial.id }}">{{ finding.serial_number }}</a>
+            {% else %}
+            {{ finding.serial_number }}
+            {% endif %}
+          </td>
+          <td>
+            <strong>{{ finding.product_code or '-' }}</strong>
+            <small>{{ finding.product_name or '-' }}</small>
+          </td>
+          <td>
+            {% if role_can_view_batch(user, finding.batch.batch_type) %}
+            <a href="/batches/{{ finding.batch.id }}">{{ finding.batch.batch_number }}</a>
+            {% else %}
+            {{ finding.batch.batch_number }}
+            {% endif %}
+          </td>
+          <td>{{ serial.product_batch_number if serial and serial.product_batch_number else '-' }}</td>
+          <td>
+            <strong>{{ serial.warehouse if serial and serial.warehouse else '-' }}</strong>
+            <small>{{ serial.location.full_path if serial and serial.location else 'No storage location' }}</small>
+          </td>
+          <td>
+            <strong>{{ report_date(serial.mfg_date) if serial and serial.mfg_date else '-' }}</strong>
+            <small>Exp: {{ report_date(serial.expiry_date) if serial and serial.expiry_date else '-' }}</small>
+          </td>
+          <td><span class="status missing">{{ finding.expected_status or '-' }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No missing stock matches these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

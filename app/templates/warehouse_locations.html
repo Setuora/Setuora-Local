@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Storage Locations - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Warehouse setup</p>
+    <h1>Storage locations</h1>
+  </div>
+  <div class="actions">
+    {% if locations %}<a class="button primary" href="/warehouse/locations/labels.pdf">Print all active QR labels</a>{% endif %}
+    <a class="button" href="/warehouse/map">Warehouse map</a>
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if created_location %}
+<section class="location-created-card">
+  <img src="/warehouse/locations/{{ created_location.id }}/qr.png" alt="QR code for {{ created_location.code }}">
+  <div>
+    <p class="eyebrow">Location created</p>
+    <h2>{{ created_location.code }}</h2>
+    <p>{{ created_location.full_path }}</p>
+    <div class="row-actions">
+      <a class="button primary" href="/warehouse/locations/labels.pdf?ids={{ created_location.id }}">Print this location label</a>
+      <a class="button" href="/warehouse/locations/{{ created_location.id }}/qr.png" download="{{ created_location.code }}-qr.png">Download QR</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="section-title"><div><h2>New location</h2><span>Every physical shelf/bin location receives its own unique, scannable QR label.</span></div></div>
+  <form method="post" action="/warehouse/locations" class="location-create-form">
+    <label>Location code<input name="code" placeholder="WH1-A-C-R04-S02-B05" required></label>
+    <label>Warehouse<input name="warehouse" placeholder="Warehouse 1" required></label>
+    <label>Warehouse level
+      <select name="warehouse_level">
+        {% for level in warehouse_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Zone<input name="zone" placeholder="A" required></label>
+    <label>Section<input name="section" placeholder="C" required></label>
+    <label>Rack<input name="rack" placeholder="04" required></label>
+    <label>Shelf<input name="shelf" placeholder="02" required></label>
+    <label>Bin<input name="bin_name" placeholder="05" required></label>
+    <button class="button primary" type="submit">Create location</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Unique QR</th><th>Code</th><th>Warehouse</th><th>Level</th><th>Zone</th><th>Section</th><th>Rack</th><th>Shelf</th><th>Bin</th><th>Status</th><th>Label</th><th></th></tr></thead>
+      <tbody>
+        {% for location in locations %}
+        <tr>
+          <td><a href="/warehouse/locations/{{ location.id }}/qr.png" target="_blank"><img class="location-qr-thumb" src="/warehouse/locations/{{ location.id }}/qr.png" alt="QR for {{ location.code }}"></a></td>
+          <td><strong>{{ location.code }}</strong></td>
+          <td>{{ location.warehouse }}</td><td>{{ location.warehouse_level }}</td><td>{{ location.zone }}</td><td>{{ location.section }}</td>
+          <td>{{ location.rack }}</td><td>{{ location.shelf }}</td><td>{{ location.bin }}</td>
+          <td><span class="status {{ 'synced' if location.active else 'failed' }}">{{ 'ACTIVE' if location.active else 'INACTIVE' }}</span></td>
+          <td>
+            <div class="location-label-actions">
+              <a class="button small" href="/warehouse/locations/labels.pdf?ids={{ location.id }}">Print</a>
+              <a class="button small ghost" href="/warehouse/locations/{{ location.id }}/qr.png" download="{{ location.code }}-qr.png">PNG</a>
+            </div>
+          </td>
+          <td>
+            <form method="post" action="/warehouse/locations/{{ location.id }}/toggle">
+              <button class="button small {{ 'danger' if location.active else 'ghost' }}" type="submit">{{ 'Deactivate' if location.active else 'Activate' }}</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="12" class="empty">No locations configured</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

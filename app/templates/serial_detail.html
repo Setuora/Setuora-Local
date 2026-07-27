@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ serial.serial_number }} - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Serial history</p>
+    <h1>{{ serial.serial_number }}</h1>
+  </div>
+  <div class="actions">
+    {% if role_can(user, 'label_files') %}
+    <a class="button" href="/serials/labels?ids={{ serial.id }}">Open label</a>
+    {% endif %}
+    <a class="button" href="/serials">Serials</a>
+  </div>
+</section>
+
+<section class="panel">
+  <dl class="details">
+    <dt>Product</dt><dd>{{ serial.product.product_code }} - {{ serial.product.product_name }}</dd>
+    <dt>Tally item</dt><dd>{{ serial.product.tally_stock_item_name }}</dd>
+    <dt>Product batch</dt><dd>{{ serial.product_batch_number or '-' }}</dd>
+    <dt>Mfg date</dt><dd>{{ serial.mfg_date.strftime('%d %b %Y') if serial.mfg_date else '-' }}</dd>
+    <dt>Expiry date</dt><dd>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</dd>
+    <dt>Current location</dt><dd>{{ serial.location.full_path if serial.location else (serial.warehouse or 'Unassigned') }}{% if serial.warehouse %} · {{ serial.warehouse_level }}{% endif %}</dd>
+    <dt>Status</dt><dd><span class="status {{ serial.display_status|lower }}">{{ serial.display_status }}</span></dd>
+    <dt>Active</dt><dd>{{ 'Yes' if serial.active else 'No' }}</dd>
+    <dt>Created</dt><dd>{{ serial.created_at.strftime('%d %b %Y %H:%M') }}</dd>
+    {% if replacement %}
+    <dt>Replacement</dt><dd><a href="/serials/{{ replacement.id }}">{{ replacement.serial_number }}</a></dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Location movement history</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Reference</th><th>Previous location</th><th>New location</th><th>User</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for move in relocations %}
+        <tr>
+          <td>{{ move.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ move.reference_number }}</td>
+          <td>{{ move.previous_location_snapshot }}</td>
+          <td>{{ move.new_location_snapshot }}</td>
+          <td>{{ move.user.username }}</td>
+          <td>{{ move.reason or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No location movements recorded</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Transaction history</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Type</th><th>Status</th><th>User</th><th>Invoice created by</th><th>Barcode sold by</th><th>Product audited by</th><th>Reference</th><th>Tally</th></tr></thead>
+      <tbody>
+        {% for txn in transactions %}
+        <tr>
+          <td>{{ txn.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ txn.transaction_type }}</td>
+          <td>{{ txn.status_from or '-' }} &rarr; {{ txn.status_to or '-' }}</td>
+          <td>{{ txn.user.username }}</td>
+          <td>{{ invoice_created_by(txn) or '-' }}</td>
+          <td>{{ barcode_sold_by(txn) or '-' }}</td>
+          <td>{{ product_audited_by(txn) or '-' }}</td>
+          <td>
+            {% if txn.batch %}<a href="/batches/{{ txn.batch.id }}">{{ txn.reference_number or txn.batch.batch_number }}</a>
+            {% else %}{{ txn.reference_number or '-' }}{% endif %}
+          </td>
+          <td>{{ txn.tally_reference or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No transaction history recorded</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Scan log</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Action</th><th>Status</th><th>User</th><th>Message</th></tr></thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td>{{ log.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ log.action }}</td>
+          <td><span class="status {{ log.status|lower }}">{{ log.status }}</span></td>
+          <td>{{ log.user.username }}</td>
+          <td>{{ log.message or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No scan log entries</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

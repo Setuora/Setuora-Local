@@ -1,0 +1,433 @@
+You can send the developer something like this:
+
+# Additional Requirements & Workflow Specification
+
+## User Roles
+
+### 1. Super Admin
+
+Full control.
+
+Permissions:
+
+* Create/Edit/Delete users
+* Assign roles
+* Product master management
+* QR generation
+* System settings
+* Tally configuration
+* View all reports
+* Export data
+* Reprocess failed Tally transactions
+* Backup and restore
+
+---
+
+### 2. Admin
+
+Permissions:
+
+* View all stock
+* View reports
+* Generate QR codes
+* Manage products
+* View transaction logs
+
+Cannot:
+
+* Delete historical transactions
+* Change system settings
+
+---
+
+### 3. Purchase User
+
+Permissions:
+
+* Receive stock
+* Scan QR
+* Create inward entries
+* View own transactions
+
+Cannot:
+
+* Delete entries
+* Access sales functions
+
+---
+
+### 4. Sales User
+
+Permissions:
+
+* Scan products
+* Dispatch stock
+* Mark sold stock
+* View own transactions
+
+Cannot:
+
+* Modify purchase entries
+
+---
+
+### 5. Auditor
+
+Permissions:
+
+* Perform stock verification
+* Scan products
+* Generate audit reports
+
+Cannot:
+
+* Create purchase entries
+* Create sales entries
+
+---
+purchase person 
+has sales return and purchase return option 
+genrate QR coe new with seprate variation 
+
+
+
+
+
+
+
+
+
+## Product Workflow
+
+### Product Creation
+
+Admin creates:
+
+```text
+Product Code
+Product Name
+HSN
+GST
+Unit
+```
+
+Example:
+
+```text
+SG001
+Turmeric Powder 100g
+0910
+5%
+PCS
+```
+
+---
+
+## QR Generation Workflow
+
+Admin selects:
+
+```text
+Product
+Quantity
+```
+
+Example:
+
+```text
+Turmeric Powder
+1000 Units
+```
+
+System generates:
+
+```text
+SG001-000001
+SG001-000002
+...
+SG001-001000
+```
+
+Generate:
+
+* QR Image
+* PDF Labels
+* Excel Export
+
+---
+
+## Stock Receiving Workflow
+
+Purchase User
+
+Step 1:
+Login
+
+Step 2:
+Open Scanner
+
+Step 3:
+Scan QR
+
+Example:
+
+```text
+SG001-000501
+```
+
+Step 4:
+Confirm
+
+System records:
+
+```text
+User
+Date
+Time
+Action = RECEIVE
+```
+
+Step 5:
+
+Update Tally automatically.
+
+---
+
+## Sales Workflow
+
+Sales User
+
+Step 1:
+Login
+
+Step 2:
+Scan QR
+
+Example:
+
+```text
+SG001-000501
+```
+
+Step 3:
+Confirm Sale
+
+System records:
+
+```text
+Action = SOLD
+Date
+Time
+User
+```
+
+Step 4:
+
+Send transaction to Tally.
+
+---
+
+## Audit Workflow
+
+Auditor
+
+Step 1:
+Start Audit Session
+
+Step 2:
+Scan available stock
+
+Step 3:
+Complete Audit
+
+System compares:
+
+```text
+Expected Stock
+Vs
+Scanned Stock
+```
+
+Generate:
+
+```text
+Missing Items
+Extra Items
+Verified Items
+```
+
+---
+
+## Product Status Workflow
+
+Every serial number must have status:
+
+```text
+GENERATED
+RECEIVED
+IN_STOCK
+SOLD
+AUDITED
+MISSING
+DAMAGED
+```
+
+Status changes automatically.
+
+Example:
+
+```text
+GENERATED
+↓
+RECEIVED
+↓
+IN_STOCK
+↓
+SOLD
+```
+
+---
+
+## Tally Integration Workflow
+
+### Receive
+
+Scan:
+
+```text
+SG001-000501
+```
+
+Create:
+
+```text
+Stock Receipt Entry
+```
+
+in Tally.
+
+---
+
+### Sale
+
+Scan:
+
+```text
+SG001-000501
+```
+
+Create:
+
+```text
+Stock Issue Entry
+```
+
+or configured sales stock movement in Tally.
+
+---
+
+### Failed Sync
+
+If Tally unavailable:
+
+Store transaction.
+
+Status:
+
+```text
+PENDING_SYNC
+```
+
+Retry automatically every few minutes.
+
+---
+
+## Dashboard Requirements
+
+Simple dashboard:
+
+```text
+Today's Receipts
+
+Today's Sales
+
+Today's Audits
+
+Pending Tally Sync
+
+Failed Transactions
+
+Active Users
+```
+
+No charts needed.
+
+---
+
+## Search Requirements
+
+Search by:
+
+```text
+Serial Number
+Product Name
+Date
+User
+Action
+```
+
+---
+
+## Reports
+
+### Daily Transactions
+
+### Purchase Report
+
+### Sales Report
+
+### Audit Report
+
+### Pending Sync Report
+
+### QR Generation Report
+
+Export:
+
+```text
+Excel
+CSV
+PDF
+```
+
+---
+
+## Non-Functional Requirements
+
+* Mobile-friendly
+* Works in Chrome browser
+* Camera scanning support
+* Fast loading
+* Minimal clicks
+* Audit trail for every action
+* Password encrypted
+* Automatic database backup
+* Role-based access control
+
+---
+
+## Future Ready Architecture
+
+Developer should structure code so future additions are possible:
+
+
+
+* Expiry tracking
+* Batch tracking
+
+
+without rebuilding the system.
+
+### Final Objective
+
+A simple browser-based QR scanning platform where users scan products with their phone camera, actions are recorded with full audit logs, and stock movements are synchronized automatically with Tally Prime.

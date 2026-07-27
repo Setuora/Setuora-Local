@@ -1,0 +1,658 @@
+Revised Developer Requirement Document
+
+Project: QR Scan Bridge for Tally Prime
+
+Objective
+
+Develop a simple, fast, lightweight web application that uses mobile phones to scan QR codes on products and automatically update Tally Prime.
+
+The application is not an inventory system.
+
+The application is not a billing system.
+
+The application is not an ERP.
+
+Tally Prime remains the primary system for:
+
+Stock management
+
+Inventory records
+
+Accounting
+
+Purchase entries
+
+Sales entries
+
+Reports
+
+
+The app acts only as a QR scanning and transaction capture layer between users and Tally.
+
+
+---
+
+Core Workflow
+
+Product QR Code
+       ↓
+Phone Camera Scan
+       ↓
+Web App
+       ↓
+Python Backend
+       ↓
+Tally Prime XML API
+       ↓
+Tally Updated
+
+
+---
+
+Project Goals
+
+1. Eliminate manual stock entry.
+
+
+2. Allow stock movement using phone camera scans.
+
+
+3. Maintain scan history.
+
+
+4. Update Tally automatically.
+
+
+5. Minimize user actions.
+
+
+6. Simple UI suitable for warehouse staff.
+
+
+7. Fast performance.
+
+
+8. Low development cost.
+
+
+9. Easy future expansion.
+
+
+
+
+---
+
+User Roles
+
+Admin
+
+Can:
+
+Create users
+
+Reset passwords
+
+View scan logs
+
+Configure Tally connection
+
+View system status
+
+
+Cannot directly modify transaction history.
+
+
+---
+
+Purchase User
+
+Purpose:
+
+Receiving stock.
+
+Actions:
+
+Scan product QR
+
+Submit receive transaction
+
+
+Result:
+
+Stock receipt posted to Tally.
+
+
+---
+
+Sales User
+
+Purpose:
+
+Dispatch/sales confirmation.
+
+Actions:
+
+Scan product QR
+
+Submit sale transaction
+
+
+Result:
+
+Stock reduced in Tally.
+
+
+---
+
+Auditor
+
+Purpose:
+
+Physical verification.
+
+Actions:
+
+Scan product QR
+
+Mark as verified
+
+
+Result:
+
+Audit trail stored.
+
+No stock changes in Tally.
+
+
+---
+
+QR Code Specification
+
+Each product unit or carton will have a unique QR code.
+
+Example formats:
+
+SG001-000001
+SG001-000002
+SG001-000003
+
+or
+
+SG-CHILLI-100-000001
+
+QR should contain only the unique serial number.
+
+No pricing data.
+
+No GST data.
+
+No customer information.
+
+
+---
+
+Mobile Interface
+
+Login Screen
+
+Fields:
+
+Username
+
+Password
+
+
+Buttons:
+
+Login
+
+
+Simple and lightweight.
+
+
+---
+
+Scan Screen
+
+Large scan button.
+
+Click:
+
+Scan QR
+
+Phone camera opens.
+
+
+---
+
+Scan Result Screen
+
+Display:
+
+Serial Number
+
+Action Type
+
+Action options:
+
+Receive
+
+Sell
+
+Audit
+
+
+Submit button.
+
+
+---
+
+Success Screen
+
+Display:
+
+Transaction Successful
+Reference Number
+Timestamp
+
+
+---
+
+Backend Requirements
+
+Technology:
+
+Python FastAPI preferred
+
+Flask acceptable
+
+
+Functions:
+
+Authentication
+
+QR scan processing
+
+Tally integration
+
+Log storage
+
+
+Must expose REST APIs.
+
+
+---
+
+Database Requirements
+
+Use:
+
+SQLite for Beta
+
+
+Must be upgradeable to MySQL later.
+
+
+---
+
+Tables Required
+
+Users
+
+Fields:
+
+ID
+Username
+Password Hash
+Role
+Active Status
+Created Date
+
+
+---
+
+Scan Logs
+
+Fields:
+
+ID
+Serial Number
+Action Type
+User
+Date
+Time
+Status
+Tally Reference
+
+
+---
+
+System Settings
+
+Fields:
+
+Tally IP
+Tally Port
+Company Name
+Created Date
+
+
+---
+
+Tally Integration
+
+Must support:
+
+Receive
+
+Scan:
+
+SG001-000001
+
+Action:
+
+Receive
+
+System sends XML request to Tally.
+
+Creates stock receipt transaction.
+
+
+---
+
+Sell
+
+Scan:
+
+SG001-000001
+
+Action:
+
+Sell
+
+System sends XML request to Tally.
+
+Creates stock issue/sales movement transaction.
+
+
+---
+
+Audit
+
+Scan:
+
+SG001-000001
+
+Action:
+
+Audit
+
+Store log only.
+
+No stock movement.
+
+No voucher creation.
+
+
+---
+
+Tally Communication
+
+Preferred:
+
+Real-time XML integration.
+
+Alternative:
+
+Queue transaction and retry if Tally unavailable.
+
+
+---
+
+Error Handling
+
+Examples:
+
+QR Not Found
+
+Show:
+
+Serial Number Not Found
+
+
+---
+
+Duplicate Receive
+
+Show:
+
+Already Received
+
+
+---
+
+Already Sold
+
+Show:
+
+Already Sold
+
+
+---
+
+Tally Offline
+
+Show:
+
+Tally Connection Failed
+
+Transaction Queued
+
+System should retry later.
+
+
+---
+
+Reports
+
+Admin only.
+
+Daily Scans
+
+Filter by:
+
+Date
+
+User
+
+Action
+
+
+
+---
+
+Receive Report
+
+Show:
+
+Date
+
+User
+
+Serial Number
+
+
+
+---
+
+Sales Report
+
+Show:
+
+Date
+
+User
+
+Serial Number
+
+
+
+---
+
+Audit Report
+
+Show:
+
+Date
+
+User
+
+Serial Number
+
+
+
+---
+
+Export
+
+Formats:
+
+Excel (.xlsx)
+
+CSV
+
+
+
+---
+
+Security Requirements
+
+Password hashing
+
+Session timeout
+
+Login audit log
+
+HTTPS support
+
+Role-based permissions
+
+
+
+---
+
+Performance Requirements
+
+Target:
+
+QR scan processing < 2 seconds
+
+Tally update < 5 seconds
+
+Support 10 concurrent users
+
+Support 100,000+ scan records
+
+
+
+---
+
+Deployment
+
+Must run on:
+
+Option 1
+
+Office PC
+
+Windows 11
+
+
+Option 2
+
+Ubuntu Server
+
+Ubuntu 24.04 LTS
+
+
+
+---
+
+Browser Support
+
+Google Chrome Android
+
+Microsoft Edge Android
+
+Chrome Desktop
+
+
+No separate Android app required.
+
+
+---
+
+Deliverables
+
+1. Complete source code.
+
+
+2. Database schema.
+
+
+3. Installation guide.
+
+
+4. Tally XML integration guide.
+
+
+5. User manual.
+
+
+6. Backup procedure.
+
+
+7. Restore procedure.
+
+
+8. Deployment support.
+
+
+9. Test environment setup.
+
+
+10. One round of bug fixes after deployment.
+
+
+
+
+---
+
+Out of Scope (Not Required)
+
+Fancy dashboards
+
+AI features
+
+GPS tracking
+
+WhatsApp integration
+
+Distributor portal
+
+Customer portal
+
+Accounting module
+
+Billing module
+
+Inventory management module
+
+Mobile APK application
+
+Multi-language support
+
+
+Final MVP Statement
+
+A browser-based QR scanning system where Purchase, Sales, and Audit users scan product QR codes using their phone camera, the scan is logged, and the corresponding stock movement is automatically updated in Tally Prime through XML integration.

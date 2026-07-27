@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Labels - Setuora{% endblock %}
+{% block content %}
+{% set serial_excel_fields = "Product Code|Product Name|Tally Stock Item|Serial Number|Product Batch|Mfg Date|Expiry Date|Warehouse|Warehouse Level|Status|Created At" %}
+<section class="page-head print-hide">
+  <div>
+    <p class="eyebrow">QR labels</p>
+    <h1>Print labels</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/serials/labels.xlsx?ids={{ label_ids }}" data-xlsx-export data-xlsx-title="Customize barcode export" data-xlsx-fields="{{ serial_excel_fields }}">Download Excel</a>
+    {% if can_manage_labels %}
+    {% set label_pdf_action = '/serials/labels.pdf' %}
+    {% set label_pdf_ids = label_ids %}
+    <a class="button" href="/serials/labels.pdf?ids={{ label_ids }}" data-label-pdf-open>Download PDF</a>
+    <button
+      class="button primary"
+      type="button"
+      data-print-once
+      data-print-url="/serials/labels/print"
+      data-print-ids="{{ label_ids }}"
+      {% if not can_print %}disabled{% endif %}
+    >{{ 'Print used' if printed_serials else 'Choose printer & print' }}</button>
+    {% endif %}
+  </div>
+</section>
+
+{% if not can_manage_labels %}
+<div class="alert warn print-hide">This role can download label Excel, but cannot print labels or download label PDF.</div>
+{% endif %}
+{% if printed_serials %}
+<div class="alert warn print-hide">Print option already used for {{ printed_serials|length }} selected label{{ '' if printed_serials|length == 1 else 's' }}.</div>
+{% endif %}
+
+{% if can_manage_labels %}
+<section class="panel label-controls print-hide" data-label-dimensions>
+  <h2>Print dimensions</h2>
+  <div class="grid-form compact">
+    <label>Label width mm<input type="number" min="20" max="120" step="0.1" value="48.5" data-print-var="--print-label-width"></label>
+    <label>Label height mm<input type="number" min="12" max="80" step="0.1" value="25.4" data-print-var="--print-label-height"></label>
+    <label>QR size mm<input type="number" min="10" max="24" step="0.1" value="19.5" data-print-var="--print-qr-size"></label>
+  </div>
+  <p class="muted" data-print-status></p>
+</section>
+{% endif %}
+
+<section class="label-sheet">
+  {% for serial in serials %}
+  <div class="barcode-label">
+    <img src="/serials/{{ serial.id }}/barcode.png" alt="{{ serial.serial_number }}">
+    <strong>{{ serial.serial_number }}</strong>
+  </div>
+  {% else %}
+  <div class="empty">No labels selected</div>
+  {% endfor %}
+</section>
+{% if can_manage_labels %}
+{% include "partials/label_pdf_dialog.html" %}
+<script src="/static/label-pdf-dialog.js"></script>
+{% endif %}
+<script src="/static/label-print.js"></script>
+{% endblock %}

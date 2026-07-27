@@ -1,0 +1,10 @@
+{% for row in report.dead_stock_rows[:12] %}
+<tr>
+  <td><strong>{{ row.product_name }}</strong></td>
+  <td>{{ row.stock }}</td>
+  <td>{{ row.last_sale }}</td>
+  <td>Rs {{ '%.0f'|format(row.value) }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="empty">No dead stock found</td></tr>
+{% endfor %}

@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}Products - Setuora{% endblock %}
+{% block content %}
+{% set can_edit_products = role_can(user, 'product_create') %}
+{% set can_manage_purchase_qr_permission = has_role(user, 'admin', 'super_admin') %}
+
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Master data</p>
+    <h1>Products</h1>
+  </div>
+  <div class="actions product-page-actions">
+    <form class="search" method="get">
+      <input name="q" value="{{ q }}" placeholder="Search code, product, nickname, HSN, or Tally name">
+      <button class="button" type="submit">Search</button>
+    </form>
+    {% if can_edit_products %}
+    <button class="button primary" type="button" data-product-open="new-product-modal">New product</button>
+    {% endif %}
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<section class="panel product-list-panel">
+  <div class="section-title product-list-title">
+    <h2>Product list</h2>
+    <span>{{ products|length }} product{{ '' if products|length == 1 else 's' }}</span>
+  </div>
+  <div class="table-scroll product-table-scroll">
+    <table class="product-table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Product</th>
+          <th>Category / brand</th>
+          <th>HSN</th>
+          <th>GST</th>
+          <th>Shelf verification</th>
+          <th>Purchase QR</th>
+          <th>Report</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in products %}
+        <tr>
+          <td>
+            <button
+              class="product-open-link"
+              type="button"
+              data-product-open="product-modal-{{ product.id }}"
+              aria-haspopup="dialog"
+            >{{ product.product_code }}</button>
+          </td>
+          <td>
+            <strong class="product-list-name">{{ product.product_name }}</strong>
+            {% if product.nickname %}<small>{{ product.nickname }}</small>{% endif %}
+            <small>{{ product.unit }} · Rate <span data-product-row-rate="{{ product.id }}">{{ '%.2f'|format(product.default_rate or 0) }}</span></small>
+          </td>
+          <td>
+            {{ product.category or '-' }}
+            {% if product.brand %}<small>{{ product.brand }}</small>{% endif %}
+          </td>
+          <td data-product-row-hsn="{{ product.id }}">{{ product.hsn }}</td>
+          <td data-product-row-gst="{{ product.id }}">{{ product.gst_rate }}%</td>
+          <td>
+            <span class="status active" data-product-row-shelf="{{ product.id }}">Every {{ product.shelf_verification_interval or 1 }} scans</span>
+          </td>
+          <td>
+            <span
+              class="status {{ 'active' if product.purchase_qr_print_allowed else 'failed' }}"
+              data-product-row-purchase-qr="{{ product.id }}"
+            >{{ 'Allowed' if product.purchase_qr_print_allowed else 'Blocked' }}</span>
+          </td>
+          <td>
+            <button
+              class="button small"
+              type="button"
+              data-product-open="product-report-modal-{{ product.id }}"
+              aria-haspopup="dialog"
+            >Report</button>
+          </td>
+          <td>
+            <button
+              class="button small"
+              type="button"
+              data-product-open="product-modal-{{ product.id }}"
+              aria-haspopup="dialog"
+            >{{ 'Open' if can_edit_products else 'View' }}</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No products found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if can_edit_products %}
+<dialog id="new-product-modal" class="modal product-modal">
+  <div class="modal__head">
+    <div>
+      <p class="eyebrow">Master data</p>
+      <h2>New product</h2>
+    </div>
+    <button class="button ghost modal__close" type="button" data-product-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    <form method="post" action="/products" class="product-modal-form new-product-form" data-draft="setuora:newproduct">
+      <label>Code<input name="product_code" required></label>
+      <label>Name<input name="product_name" required></label>
+      <label>Nickname<input name="nickname"></label>
+      <label>Category<input name="category"></label>
+      <label>Brand<input name="brand"></label>
+      <label>HSN<input name="hsn" required></label>
+      <label>GST %<input name="gst_rate" type="number" min="0" step="0.01" required></label>
+      <label>Unit<input name="unit" value="Pcs" required></label>
+      <label>Default rate<input name="default_rate" type="number" min="0" step="0.01" value="0"></label>
+      <label>Sales discount %<input name="sales_discount_rate" type="number" min="0" max="100" step="0.01" value="0"></label>
+      <label>Shelf QR every N scans
+        <input name="shelf_verification_interval" type="number" min="1" max="1000" step="1" value="1" required>
+        <small>Always enabled. Minimum and default value: 1.</small>
+      </label>
+      {% if can_manage_purchase_qr_permission %}
+      <label class="checkline product-checkline">
+        <input type="checkbox" name="purchase_qr_print_allowed" value="true">
+        <span>Allow purchase QR printing<small>Purchase users can generate QR labels for this product.</small></span>
+      </label>
+      {% endif %}
+      <label>Tally stock item<input name="tally_stock_item_name"></label>
+      <label>Alternate Tally stock item<input name="alternate_tally_stock_item_name"></label>
+      <div class="product-modal-actions">
+        <span data-autosave-status class="autosave-status"></span>
+        <button class="button" type="button" data-product-close>Cancel</button>
+        <button class="button primary" type="submit">Create product</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
+{% for product in products %}
+{% set metrics = inventory_metrics[product.id] %}
+<dialog id="product-report-modal-{{ product.id }}" class="modal product-modal product-report-modal">
+  <div class="modal__head">
+    <div>
+      <p class="eyebrow">{{ product.product_code }}</p>
+      <h2>Product report</h2>
+      <p>{{ product.product_name }} · Last {{ analysis_days }} days</p>
+    </div>
+    <button class="button ghost modal__close" type="button" data-product-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body product-modal-body">
+    <div class="product-summary-grid product-report-summary">
+      <div>
+        <span>Sales</span>
+        <strong>{{ metrics.units_sold }}</strong>
+        <small>Last {{ analysis_days }} days</small>
+      </div>
+      <div>
+        <span>Available stock</span>
+        <strong>{{ metrics.available_stock }}</strong>
+        <small>Missing stock excluded</small>
+      </div>
+      <div>
+        <span>Missing stock</span>
+        <strong>{{ metrics.missing_stock }}</strong>
+        <small>Latest audit status</small>
+      </div>
+      <div>
+        <span>Restock</span>
+        <strong>{{ metrics.restock_label }}</strong>
+        <small>{{ metrics.restock_detail }}</small>
+      </div>
+    </div>
+
+    <section class="product-modal-section">
+      <div class="product-modal-section__head">
+        <div>
+          <h3>Individual sales</h3>
+          <p>Every sale recorded for this product during the analysis period.</p>
+        </div>
+        <a class="button primary" href="/products/{{ product.id }}/sales-report.pdf">Download PDF</a>
+      </div>
+      <div class="table-scroll product-report-sales">
+        <table>
+          <thead><tr><th>Date</th><th>Serial</th><th>Sold by</th><th>Batch / reference</th><th>Tally</th></tr></thead>
+          <tbody>
+            {% for sale in sales_by_product[product.id] %}
+            <tr>
+              <td>{{ sale.created_at.strftime('%d %b %Y %H:%M') }}</td>
+              <td>{{ sale.serial_number or '-' }}</td>
+              <td>{{ sale.user.username }}</td>
+              <td>{{ sale.reference_number or (sale.batch.batch_number if sale.batch else '-') }}</td>
+              <td>{{ sale.tally_reference or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">No sales during this period</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</dialog>
+
+<dialog id="product-modal-{{ product.id }}" class="modal product-modal">
+  <div class="modal__head">
+    <div>
+      <p class="eyebrow">{{ product.product_code }}</p>
+      <h2>{{ product.product_name }}</h2>
+    </div>
+    <button class="button ghost modal__close" type="button" data-product-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body product-modal-body">
+    <div class="product-summary-grid">
+      <div><span>HSN</span><strong data-product-summary-hsn="{{ product.id }}">{{ product.hsn }}</strong></div>
+      <div><span>GST</span><strong data-product-summary-gst="{{ product.id }}">{{ product.gst_rate }}%</strong></div>
+      <div><span>Unit</span><strong>{{ product.unit }}</strong></div>
+      <div><span>Nickname</span><strong data-product-summary-nickname="{{ product.id }}">{{ product.nickname or '-' }}</strong></div>
+      <div><span>Tally item</span><strong data-product-summary-tally="{{ product.id }}">{{ product.tally_stock_item_name }}</strong></div>
+      <div><span>Alt Tally item</span><strong data-product-summary-alt-tally="{{ product.id }}">{{ product.alternate_tally_stock_item_name or '-' }}</strong></div>
+      <div>
+        <span>Shelf check</span>
+        <strong data-product-summary-shelf="{{ product.id }}">Every {{ product.shelf_verification_interval or 1 }} scans</strong>
+      </div>
+      <div>
+        <span>Purchase QR</span>
+        <strong data-product-summary-purchase-qr="{{ product.id }}">{{ 'Allowed' if product.purchase_qr_print_allowed else 'Blocked' }}</strong>
+      </div>
+    </div>
+
+    {% if can_edit_products %}
+    <section class="product-modal-section">
+      <div class="product-modal-section__head">
+        <div>
+          <h3>Product settings</h3>
+          <p>Pricing, classification, and shelf-verification policy.</p>
+        </div>
+      </div>
+      <form method="post" action="/products/{{ product.id }}/pricing" class="product-modal-form" data-product-settings-form data-product-id="{{ product.id }}">
+        <label>Nickname<input name="nickname" value="{{ product.nickname or '' }}"></label>
+        <label>Category<input name="category" value="{{ product.category or '' }}"></label>
+        <label>Brand<input name="brand" value="{{ product.brand or '' }}"></label>
+        <label>HSN<input name="hsn" value="{{ product.hsn }}" required></label>
+        <label>GST %<input name="gst_rate" type="number" min="0" max="100" step="0.01" value="{{ product.gst_rate }}" required></label>
+        <label>Tally stock item<input name="tally_stock_item_name" value="{{ product.tally_stock_item_name }}"></label>
+        <label>Alternate Tally stock item<input name="alternate_tally_stock_item_name" value="{{ product.alternate_tally_stock_item_name or '' }}"></label>
+        <label>Default rate<input name="default_rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(product.default_rate or 0) }}"></label>
+        <label>Sales discount %<input name="sales_discount_rate" type="number" min="0" max="100" step="0.01" value="{{ '%.2f'|format(product.sales_discount_rate or 0) }}"></label>
+        <label>Shelf QR every N scans
+          <input name="shelf_verification_interval" type="number" min="1" max="1000" step="1" value="{{ product.shelf_verification_interval or 1 }}" required>
+          <small>Always enabled. Minimum value: 1.</small>
+        </label>
+        {% if can_manage_purchase_qr_permission %}
+        <label class="checkline product-checkline">
+          <input type="checkbox" name="purchase_qr_print_allowed" value="true" {{ 'checked' if product.purchase_qr_print_allowed else '' }}>
+          <span>Allow purchase QR printing<small>Purchase users can generate QR labels for this product.</small></span>
+        </label>
+        {% endif %}
+        <div class="product-modal-actions">
+          <span class="autosave-status" data-product-save-status aria-live="polite"></span>
+          <button class="button primary" type="submit" data-product-save-button>Save settings</button>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if has_role(user, 'super_admin') %}
+    <section class="product-modal-section product-danger-zone">
+      <div>
+        <h3>Delete product</h3>
+        <p>Products with serials or transaction history cannot be deleted.</p>
+      </div>
+      <form method="post" action="/products/{{ product.id }}/delete" onsubmit="return confirm('Delete this product? Products with serials or transaction history cannot be deleted.');">
+        <button class="button danger" type="submit">Delete product</button>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+</dialog>
+{% endfor %}
+
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    function closeDialog(dialog) {
+      if (dialog && typeof dialog.close === "function") dialog.close();
+    }
+
+    document.querySelectorAll("[data-product-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const dialog = document.getElementById(button.dataset.productOpen);
+        if (!dialog) return;
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+      });
+    });
+
+    document.querySelectorAll("dialog.product-modal").forEach((dialog) => {
+      dialog.querySelectorAll("[data-product-close]").forEach((button) => {
+        button.addEventListener("click", () => closeDialog(dialog));
+      });
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) closeDialog(dialog);
+      });
+    });
+
+    document.querySelectorAll("[data-product-settings-form]").forEach((form) => {
+      const status = form.querySelector("[data-product-save-status]");
+      const button = form.querySelector("[data-product-save-button]");
+      const productId = form.dataset.productId;
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Saving...";
+        status.textContent = "Saving...";
+        status.className = "autosave-status saving";
+
+        try {
+          const response = await fetch(form.action, {
+            method: "POST",
+            body: new FormData(form),
+            credentials: "same-origin",
+            headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+          });
+          const payload = await response.json().catch(() => ({ ok: false, error: "Save failed" }));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || "Save failed");
+
+          const saved = payload.product;
+          const intervalText = `Every ${saved.shelf_verification_interval} scans`;
+          const gstText = `${saved.gst_rate}%`;
+          const summaryShelf = document.querySelector(`[data-product-summary-shelf="${productId}"]`);
+          const summaryHsn = document.querySelector(`[data-product-summary-hsn="${productId}"]`);
+          const summaryGst = document.querySelector(`[data-product-summary-gst="${productId}"]`);
+          const summaryNickname = document.querySelector(`[data-product-summary-nickname="${productId}"]`);
+          const summaryTally = document.querySelector(`[data-product-summary-tally="${productId}"]`);
+          const summaryAltTally = document.querySelector(`[data-product-summary-alt-tally="${productId}"]`);
+          const summaryPurchaseQr = document.querySelector(`[data-product-summary-purchase-qr="${productId}"]`);
+          const rowShelf = document.querySelector(`[data-product-row-shelf="${productId}"]`);
+          const rowHsn = document.querySelector(`[data-product-row-hsn="${productId}"]`);
+          const rowGst = document.querySelector(`[data-product-row-gst="${productId}"]`);
+          const rowPurchaseQr = document.querySelector(`[data-product-row-purchase-qr="${productId}"]`);
+          const rowRate = document.querySelector(`[data-product-row-rate="${productId}"]`);
+          if (summaryShelf) summaryShelf.textContent = intervalText;
+          if (summaryHsn) summaryHsn.textContent = saved.hsn || "-";
+          if (summaryGst) summaryGst.textContent = gstText;
+          if (summaryNickname) summaryNickname.textContent = saved.nickname || "-";
+          if (summaryTally) summaryTally.textContent = saved.tally_stock_item_name || "-";
+          if (summaryAltTally) summaryAltTally.textContent = saved.alternate_tally_stock_item_name || "-";
+          if (summaryPurchaseQr) summaryPurchaseQr.textContent = saved.purchase_qr_print_allowed ? "Allowed" : "Blocked";
+          if (rowShelf) rowShelf.textContent = intervalText;
+          if (rowHsn) rowHsn.textContent = saved.hsn || "-";
+          if (rowGst) rowGst.textContent = gstText;
+          if (rowPurchaseQr) {
+            rowPurchaseQr.textContent = saved.purchase_qr_print_allowed ? "Allowed" : "Blocked";
+            rowPurchaseQr.className = `status ${saved.purchase_qr_print_allowed ? "active" : "failed"}`;
+          }
+          if (rowRate) rowRate.textContent = Number(saved.default_rate).toFixed(2);
+
+          status.textContent = "Saved";
+          status.className = "autosave-status ok";
+          button.textContent = "Saved";
+          setTimeout(() => {
+            button.textContent = originalText;
+            status.textContent = "";
+          }, 1600);
+        } catch (error) {
+          status.textContent = error.message || "Save failed";
+          status.className = "autosave-status error";
+          button.textContent = originalText;
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}

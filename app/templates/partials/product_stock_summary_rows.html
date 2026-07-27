@@ -1,0 +1,23 @@
+{% for row in product_rows %}
+<tr>
+  <td><strong>{{ row.product_name }}</strong></td>
+  <td>{{ row.product_code }}</td>
+  <td><strong>{{ row.stock }}</strong></td>
+  <td>{{ row.purchased }}</td>
+  <td>{{ row.sold }}</td>
+  <td>{{ report_date(row.last_audit_at) if row.last_audit_at else 'No audit' }}</td>
+  <td>
+    {{ row.last_audited_quantity if row.last_audit_at else '-' }}
+    {% if show_audit_variance and row.last_audit_at and row.last_audited_quantity == 0 and row.last_audit_missing %}
+    <span class="muted">Nothing scanned</span>
+    {% endif %}
+  </td>
+  {% if show_audit_variance %}
+  <td><span class="status {{ 'missing' if row.last_audit_missing else 'synced' }}">{{ row.last_audit_missing if row.last_audit_at else '-' }}</span></td>
+  <td><span class="status {{ 'extra' if row.last_audit_extra else 'synced' }}">{{ row.last_audit_extra if row.last_audit_at else '-' }}</span></td>
+  {% endif %}
+  <td>{{ report_date(row.nearest_expiry) if row.nearest_expiry else '-' }}</td>
+</tr>
+{% else %}
+<tr><td colspan="{{ 10 if show_audit_variance else 8 }}" class="empty">No products found</td></tr>
+{% endfor %}

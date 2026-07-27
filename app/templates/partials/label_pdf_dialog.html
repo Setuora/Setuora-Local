@@ -1,0 +1,28 @@
+<dialog class="modal" data-label-pdf-dialog>
+  <div class="modal__head">
+    <div>
+      <h2>Label PDF layout</h2>
+      <small class="muted">Review before download</small>
+    </div>
+    <button class="button ghost modal__close" type="button" data-label-pdf-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    <form method="get" action="{{ label_pdf_action }}" class="stack">
+      {% if label_pdf_ids is defined %}
+      <input type="hidden" name="ids" value="{{ label_pdf_ids }}">
+      {% endif %}
+      <div class="two-col">
+        <label>Rows per page
+          <input name="rows_per_page" type="number" min="1" max="11" step="1" value="{{ label_pdf_rows|default(11) }}" required>
+        </label>
+        <label>Columns per page
+          <input name="columns_per_page" type="number" min="1" max="4" step="1" value="{{ label_pdf_columns|default(4) }}" required>
+        </label>
+      </div>
+      <div class="save-row">
+        <button class="button primary" type="submit">Download PDF</button>
+        <button class="button" type="button" data-label-pdf-close>Cancel</button>
+      </div>
+    </form>
+  </div>
+</dialog>

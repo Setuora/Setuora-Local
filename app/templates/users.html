@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block title %}Users - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Access</p>
+    <h1>Users</h1>
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert success">{{ success }}</div>{% endif %}
+
+<section class="panel users-create-panel">
+  <h2>New user</h2>
+  <form method="post" action="/users" class="grid-form compact">
+    <label>Username<input name="username" required></label>
+    <label>Password
+      <span class="password-field" data-password-field>
+        <input name="password" type="password" required>
+        <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+      </span>
+    </label>
+    <div class="role-picker" data-role-picker>
+      <span class="role-picker__label">Roles</span>
+      <details class="role-picker__menu">
+        <summary><span data-role-picker-label>Select roles</span></summary>
+        <div class="role-picker__panel">
+          {% for role in roles %}
+          <label class="role-picker__option">
+            <input type="checkbox" name="role" value="{{ role.value }}">
+            <span>{{ role.value }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+    <button class="button primary" type="submit">Create user</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Username</th><th>Roles</th><th>Tally access</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for row in users %}
+        <tr>
+          <td>{{ row.username }}</td>
+          <td>{{ row.role_label }}</td>
+          <td><span class="tally-access-summary">{{ user_access[row.id].summary }}</span></td>
+          <td><span class="status {{ 'synced' if row.active else 'failed' }}">{{ 'ACTIVE' if row.active else 'DISABLED' }}</span></td>
+          <td>
+            <div class="user-actions">
+            {% if not has_role(row, 'super_admin') %}
+            <button
+              class="button small ghost"
+              type="button"
+              data-tally-access-open
+              data-user-id="{{ row.id }}"
+              data-username="{{ row.username }}"
+              data-selected-companies="{{ user_access[row.id].company_ids|tojson|forceescape }}"
+              data-selected-ledgers="{{ user_access[row.id].ledger_keys|tojson|forceescape }}"
+              data-selected-tally-users="{{ user_access[row.id].tally_user_keys|tojson|forceescape }}"
+              data-selected-tally-user-values="{{ user_access[row.id].tally_user_values|tojson|forceescape }}"
+            >Tally access</button>
+            {% endif %}
+            {% if row.id != user.id %}
+            <form method="post" action="/users/{{ row.id }}/toggle">
+              <button class="button small ghost" type="submit">{{ 'Disable' if row.active else 'Enable' }}</button>
+            </form>
+            {% endif %}
+            {% if has_role(user, 'super_admin') and row.id != user.id %}
+            <button
+              class="button small ghost"
+              type="button"
+              data-reset-password
+              data-user-id="{{ row.id }}"
+              data-username="{{ row.username }}"
+            >Reset password</button>
+            <form method="post" action="/users/{{ row.id }}/delete" onsubmit="return confirm('Delete this user? Accounts with activity history will be removed from this list but kept for old records.');">
+              <button class="button small danger" type="submit">Delete user</button>
+            </form>
+            {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<dialog id="tally-access-modal" class="modal tally-access-modal">
+  <div class="modal__head">
+    <div>
+      <h2>Assign Tally access</h2>
+      <small class="muted">Choose the Tally data available to <strong data-tally-access-username></strong>.</small>
+    </div>
+    <button class="button ghost modal__close" type="button" data-tally-access-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    <p class="tally-access-rule">
+      Leave a section empty to allow all values in that section. Assignments take effect for live and saved Tally data.
+    </p>
+    <form method="post" class="stack" data-tally-access-form>
+      <section class="tally-scope-section" data-tally-scope-section>
+        <div class="tally-scope-section__head">
+          <div><h3>Companies</h3><small class="muted">Limit which configured company profiles this user can open.</small></div>
+          <input type="search" placeholder="Search companies" aria-label="Search companies" data-tally-scope-search>
+        </div>
+        <div class="tally-scope-options">
+          {% for company in companies %}
+          <label class="tally-scope-option" data-tally-scope-option>
+            <input type="checkbox" name="company_id" value="{{ company.id }}" data-resource="company" data-access-key="{{ company.id }}">
+            <span><strong>{{ company.name }}</strong><small>{{ company.tally_company_name or 'Tally company not selected' }}</small></span>
+          </label>
+          {% else %}
+          <p class="empty">No company profiles are configured.</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="tally-scope-section" data-tally-scope-section>
+        <div class="tally-scope-section__head">
+          <div><h3>Ledgers</h3><small class="muted">Ledger names discovered and saved from Tally.</small></div>
+          <input type="search" placeholder="Search ledgers" aria-label="Search ledgers" data-tally-scope-search>
+        </div>
+        <div class="tally-scope-options tally-scope-options--tall">
+          {% for company in companies %}
+            {% set company_ledgers = ledger_options|selectattr('company_id', 'equalto', company.id)|list %}
+            {% if company_ledgers %}
+            <p class="tally-scope-company" data-tally-scope-option>{{ company.name }}</p>
+            {% for ledger in company_ledgers %}
+            <label class="tally-scope-option" data-tally-scope-option>
+              <input
+                type="checkbox"
+                name="ledger_id"
+                value="{{ ledger.id }}"
+                data-resource="ledger"
+                data-access-key="{{ ledger.company_id }}:{{ ledger.ledger_key }}"
+              >
+              <span><strong>{{ ledger.name }}</strong><small>{{ ledger.parent or 'No parent group' }}</small></span>
+            </label>
+            {% endfor %}
+            {% endif %}
+          {% else %}
+          <p class="empty">No companies are configured.</p>
+          {% endfor %}
+          {% if not ledger_options %}
+          <p class="empty">No ledgers have been saved yet. Open Tally Check and refresh a company first.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="tally-scope-section" data-tally-scope-section>
+        <div class="tally-scope-section__head">
+          <div><h3>Tally users</h3><small class="muted">Users found on saved Tally sales vouchers.</small></div>
+          <input type="search" placeholder="Search Tally users" aria-label="Search Tally users" data-tally-scope-search>
+        </div>
+        <div class="tally-scope-options">
+          {% for company in companies %}
+            {% set company_users = tally_user_options|selectattr('company_id', 'equalto', company.id)|list %}
+            {% if company_users %}
+            <p class="tally-scope-company" data-tally-scope-option>{{ company.name }}</p>
+            {% for tally_identity in company_users %}
+            <label class="tally-scope-option" data-tally-scope-option>
+              <input
+                type="checkbox"
+                name="tally_user"
+                value="{{ tally_identity.value }}"
+                data-resource="tally_user"
+                data-access-key="{{ tally_identity.key }}"
+              >
+              <span><strong>{{ tally_identity.username }}</strong></span>
+            </label>
+            {% endfor %}
+            {% endif %}
+          {% endfor %}
+          {% if not tally_user_options %}
+          <p class="empty">No Tally users have been discovered yet. Refresh a company's sales book in Tally Check first.</p>
+          {% endif %}
+        </div>
+        {% if companies %}
+        <div class="tally-user-custom-grid">
+          {% for company in companies %}
+          <label>{{ company.name }} — other usernames
+            <input
+              type="text"
+              placeholder="Username 1, Username 2"
+              autocomplete="off"
+              data-tally-user-custom
+              data-company-id="{{ company.id }}"
+            >
+          </label>
+          {% endfor %}
+        </div>
+        <small class="muted">Use commas to assign usernames that have not appeared on a saved voucher yet.</small>
+        {% endif %}
+      </section>
+
+      <div class="tally-access-actions">
+        <span class="muted" data-tally-access-selection></span>
+        <button class="button primary" type="submit">Save Tally access</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{% if has_role(user, 'super_admin') %}
+<dialog id="password-reset-modal" class="modal">
+  <div class="modal__head">
+    <div>
+      <h2>Reset password</h2>
+      <small class="muted">Set a new password for <strong data-reset-username></strong>.</small>
+    </div>
+    <button class="button ghost modal__close" type="button" data-reset-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    <p class="muted">Existing passwords are securely hashed and cannot be viewed.</p>
+    <form method="post" class="stack" data-reset-form>
+      <label>New password
+        <span class="password-field" data-password-field>
+          <input name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirm new password
+        <input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <label class="checkline">
+        <input type="checkbox" name="force_change" value="true" checked>
+        Require this user to change the password after signing in
+      </label>
+      <button class="button primary full" type="submit">Reset password</button>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
+<script src="/static/password-toggle.js"></script>
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    const pickers = Array.from(document.querySelectorAll("[data-role-picker]"));
+    pickers.forEach((picker) => {
+      const details = picker.querySelector("details");
+      const label = picker.querySelector("[data-role-picker-label]");
+      const inputs = Array.from(picker.querySelectorAll('input[type="checkbox"]'));
+
+      function updateLabel() {
+        const selected = inputs.filter((input) => input.checked).map((input) => input.value);
+        label.textContent = selected.length ? selected.join(", ") : "Select roles";
+        picker.classList.toggle("is-empty", selected.length === 0);
+      }
+
+      inputs.forEach((input) => input.addEventListener("change", updateLabel));
+      updateLabel();
+
+      document.addEventListener("click", (event) => {
+        if (details.open && !picker.contains(event.target)) details.removeAttribute("open");
+      });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      pickers.forEach((picker) => {
+        const details = picker.querySelector("details");
+        if (details) details.removeAttribute("open");
+      });
+    });
+  })();
+</script>
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    const modal = document.getElementById("tally-access-modal");
+    if (!modal) return;
+    const form = modal.querySelector("[data-tally-access-form]");
+    const username = modal.querySelector("[data-tally-access-username]");
+    const selection = modal.querySelector("[data-tally-access-selection]");
+    const checkboxes = Array.from(form.querySelectorAll('input[type="checkbox"][data-resource]'));
+    const customInputs = Array.from(form.querySelectorAll("[data-tally-user-custom]"));
+
+    function parseList(value) {
+      try { return new Set(JSON.parse(value || "[]").map(String)); }
+      catch (_error) { return new Set(); }
+    }
+
+    function updateSelection() {
+      const customCount = customInputs.reduce(
+        (total, input) => total + input.value.split(/[\n,]+/).filter((value) => value.trim()).length,
+        0
+      );
+      const selected = checkboxes.filter((input) => input.checked).length + customCount;
+      selection.textContent = selected
+        ? selected + " assignment" + (selected === 1 ? "" : "s") + " selected"
+        : "No assignments: unrestricted Tally access";
+    }
+
+    document.querySelectorAll("[data-tally-access-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const selected = {
+          company: parseList(button.dataset.selectedCompanies),
+          ledger: parseList(button.dataset.selectedLedgers),
+          tally_user: parseList(button.dataset.selectedTallyUsers)
+        };
+        form.action = "/users/" + button.dataset.userId + "/tally-access";
+        username.textContent = button.dataset.username || "this user";
+        checkboxes.forEach((input) => {
+          input.checked = selected[input.dataset.resource].has(input.dataset.accessKey);
+        });
+        const discoveredTallyUsers = new Set(
+          checkboxes
+            .filter((input) => input.dataset.resource === "tally_user")
+            .map((input) => input.dataset.accessKey)
+        );
+        const customByCompany = new Map();
+        parseList(button.dataset.selectedTallyUserValues).forEach((value) => {
+          const separator = value.indexOf(":");
+          if (separator < 1) return;
+          const companyId = value.slice(0, separator);
+          const tallyUsername = value.slice(separator + 1);
+          const normalizedKey = companyId + ":" + tallyUsername.trim().toLocaleLowerCase();
+          if (discoveredTallyUsers.has(normalizedKey)) return;
+          const names = customByCompany.get(companyId) || [];
+          names.push(tallyUsername);
+          customByCompany.set(companyId, names);
+        });
+        form.querySelectorAll("[data-tally-user-custom]").forEach((input) => {
+          input.value = (customByCompany.get(input.dataset.companyId) || []).join(", ");
+        });
+        updateSelection();
+        if (typeof modal.showModal === "function") modal.showModal();
+        else modal.setAttribute("open", "");
+      });
+    });
+
+    checkboxes.forEach((input) => input.addEventListener("change", updateSelection));
+    customInputs.forEach((input) => input.addEventListener("input", updateSelection));
+    form.addEventListener("submit", () => {
+      form.querySelectorAll("[data-generated-tally-user]").forEach((input) => input.remove());
+      form.querySelectorAll("[data-tally-user-custom]").forEach((input) => {
+        input.value.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean).forEach((value) => {
+          const hidden = document.createElement("input");
+          hidden.type = "hidden";
+          hidden.name = "tally_user";
+          hidden.value = input.dataset.companyId + ":" + value;
+          hidden.dataset.generatedTallyUser = "true";
+          form.appendChild(hidden);
+        });
+      });
+    });
+    modal.querySelector("[data-tally-access-close]").addEventListener("click", () => modal.close());
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) modal.close();
+    });
+
+    modal.querySelectorAll("[data-tally-scope-section]").forEach((section) => {
+      const search = section.querySelector("[data-tally-scope-search]");
+      const options = Array.from(section.querySelectorAll("[data-tally-scope-option]"));
+      if (!search) return;
+      search.addEventListener("input", () => {
+        const query = search.value.trim().toLocaleLowerCase();
+        options.forEach((option) => {
+          option.hidden = Boolean(query) && !option.textContent.toLocaleLowerCase().includes(query);
+        });
+      });
+    });
+  })();
+</script>
+{% if has_role(user, 'super_admin') %}
+<script src="/static/user-password-reset.js"></script>
+{% endif %}
+{% endblock %}

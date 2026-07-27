@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title|default('Batches') }} - Setuora{% endblock %}
+{% block content %}
+{% set scope = batch_scope|default('all') %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ page_eyebrow|default('Transactions') }}</p>
+    <h1>{{ page_title|default('Batches') }}</h1>
+  </div>
+  <div class="actions">
+    {% if scope in ['all', 'purchase'] and role_can(user, 'batch_purchase') %}
+    <a class="button primary" href="/batches/new?batch_type=PURCHASE">Purchase</a>
+    {% endif %}
+    {% if scope == 'all' and role_can(user, 'batch_purchase_return') %}
+    <a class="button" href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>
+    {% endif %}
+    {% if scope in ['all', 'sales'] and role_can(user, 'batch_sale') %}
+    <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
+    {% endif %}
+    {% if scope == 'all' and role_can(user, 'batch_sales_return') %}
+    <a class="button" href="/batches/new?batch_type=SALES_RETURN">Sales return</a>
+    {% endif %}
+    {% if scope == 'all' and role_can(user, 'batch_issue') %}
+    <a class="button" href="/batches/new?batch_type=ISSUE">Issue</a>
+    {% endif %}
+    {% if scope == 'all' and role_can(user, 'batch_audit') %}
+    <a class="button" href="/audit-assignments">Audits</a>
+    {% endif %}
+    {% if scope != 'all' and role_can(user, 'batch_list') %}
+    <a class="button" href="/batches">All batches</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Batch</th><th>Type</th><th>Party</th><th>Reason</th><th>Status</th><th>Items</th><th>Retries</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        {% for batch in batches %}
+        <tr>
+          <td>
+            {% if role_can_view_batch(user, batch.batch_type) %}
+            <a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a>
+            {% else %}
+            {{ batch.batch_number }}
+            {% endif %}
+          </td>
+          <td>{{ batch.batch_type }}</td>
+          <td>{{ batch.party_name or '-' }}</td>
+          <td>{{ batch.reason_code or '-' }}</td>
+          <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
+          <td>{{ batch.items|length }}</td>
+          <td>{{ batch.retry_count or 0 }}</td>
+          <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td class="col-actions">
+            <div class="row-actions">
+            {% if batch.batch_type == 'SALE' and batch.items|length > 0 and role_can_view_batch(user, batch.batch_type) %}
+            <a class="button small" href="/batches/{{ batch.id }}/preinvoice.pdf">Pre-invoice</a>
+            {% endif %}
+            {% if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] and batch.items|length > 0 and role_can(user, 'tally_xml') and role_can_view_batch(user, batch.batch_type) %}
+            <a class="button small" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
+            {% endif %}
+            {% if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] and role_can(user, 'tally_sync_retry') and role_can_view_batch(user, batch.batch_type) %}
+            <form method="post" action="/batches/{{ batch.id }}/retry">
+              <button class="button small" type="submit">Sync</button>
+            </form>
+            {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">{{ empty_message|default('No batches yet') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

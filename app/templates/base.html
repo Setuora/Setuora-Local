@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#faf9f5">
+  <title>{% block title %}Setuora Barcode Tally Bridge{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css?v=20260716-gateway-result-1">
+</head>
+<body>
+  {% if user %}
+  <header class="global-nav">
+    <a class="brand" href="{{ user_home_path(user) }}">
+      <span class="brand__mark">Setuora</span>
+    </a>
+    <nav class="subnav" aria-label="Sections">
+      <div class="subnav__inner">
+      {% if role_can(user, 'page_dashboard') and role_can(user, 'dashboard_data') %}
+      <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
+      {% endif %}
+      {% set nav_batch_type = request.query_params.get('batch_type', '') %}
+      {% if batch is defined and batch %}{% set nav_batch_type = batch.batch_type %}{% endif %}
+      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_purchase') or role_can(user, 'batch_purchase_return')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/batches') and nav_batch_type in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] else '' }}">Purchase</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'batch_purchase') %}<a href="/batches/new?batch_type=PURCHASE">Purchase</a>{% endif %}
+          {% if role_can(user, 'batch_purchase_return') %}<a href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_sale') or role_can(user, 'batch_sales_return')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/batches') and nav_batch_type in ['SALE', 'SALES_RETURN'] else '' }}">Sales</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'batch_sale') %}<a href="/batches/new?batch_type=SALE">Sale</a>{% endif %}
+          {% if role_can(user, 'batch_sales_return') %}<a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_issue') or role_can(user, 'purchase_data') or role_can(user, 'sales_data') or role_can(user, 'batch_list')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path in ['/batches', '/batches/purchase', '/batches/sales'] or (request.url.path.startswith('/batches') and nav_batch_type in ['ISSUE', 'AUDIT']) else '' }}">Stock</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'batch_issue') %}<a href="/batches/new?batch_type=ISSUE">Issue</a>{% endif %}
+          {% if role_can(user, 'purchase_data') %}<a href="/batches/purchase">Purchase batches</a>{% endif %}
+          {% if role_can(user, 'sales_data') %}<a href="/batches/sales">Sales batches</a>{% endif %}
+          {% if role_can(user, 'batch_list') %}<a href="/batches">All batches</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_warehouse') and (role_can(user, 'stock_relocation') or role_can(user, 'warehouse_data') or role_can(user, 'location_manage')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/warehouse') else '' }}">Warehouse</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'stock_relocation') %}<a href="/warehouse/move">Move stock</a>{% endif %}
+          {% if role_can(user, 'warehouse_data') %}<a href="/warehouse/map">Warehouse map</a>{% endif %}
+          {% if role_can(user, 'warehouse_data') %}<a href="/warehouse/history">Movement history</a>{% endif %}
+          {% if role_can(user, 'location_manage') %}<a href="/warehouse/locations">Storage locations</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_barcodes') and (role_can(user, 'barcode_assignment') or role_can(user, 'barcode_replacement')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/barcode-assignment') or request.url.path.startswith('/barcode-replacement') or request.url.path.startswith('/qr-replacement') else '' }}">Barcodes</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'barcode_assignment') %}<a href="/barcode-assignment">Assignment</a>{% endif %}
+          {% if role_can(user, 'barcode_replacement') %}<a href="/barcode-replacement">Replacement</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_serials') and role_can(user, 'serial_data') %}
+      <a href="/serials" class="{{ 'active' if request.url.path.startswith('/serials') else '' }}">Serials</a>
+      {% endif %}
+      {% if role_can(user, 'audit_assignment_manage') %}
+      <a href="/audit-assignments" class="{{ 'active' if request.url.path.startswith('/audit-assignments') else '' }}">Audit assignments</a>
+      {% endif %}
+      {% if role_can(user, 'page_reports') and role_can(user, 'reports_data') %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/reports') else '' }}">Reports</summary>
+        <div class="nav-menu__panel">
+          <a href="/reports">Overview</a>
+          <a href="/reports/missing-stock">Missing stock</a>
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_stock_movement') and role_can(user, 'stock_movement_data') %}
+      <a href="/stock-movement" class="{{ 'active' if request.url.path.startswith('/stock-movement') else '' }}">Stock movement</a>
+      {% endif %}
+      {% set can_use_tally_check = role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit') %}
+      {% if role_can(user, 'page_admin_menu') and ((role_can(user, 'page_products') and role_can(user, 'product_master')) or (role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics')) or (role_can(user, 'page_settings') and role_can(user, 'settings_edit')) or can_use_tally_check or has_role(user, 'super_admin') or (role_can(user, 'page_maintenance') and role_can(user, 'backup_data')) or (role_can(user, 'page_users') and role_can(user, 'users_manage'))) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/products') or request.url.path.startswith('/expiry') or request.url.path.startswith('/settings') or request.url.path.startswith('/tally-check') or request.url.path.startswith('/maintenance') or request.url.path.startswith('/users') else '' }}">Admin</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics') %}<a href="/expiry">Expiry</a>{% endif %}
+          {% if role_can(user, 'page_maintenance') and role_can(user, 'backup_data') %}<a href="/maintenance">Maintenance</a>{% endif %}
+          {% if role_can(user, 'page_products') and role_can(user, 'product_master') %}<a href="/products">Products</a>{% endif %}
+          {% if has_role(user, 'super_admin') %}<a href="/settings/access">Role access</a>{% endif %}
+          {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}<a href="/settings">Settings</a>{% endif %}
+          {% if can_use_tally_check %}<a href="/tally-check">Tally Check</a>{% endif %}
+          {% if role_can(user, 'page_users') and role_can(user, 'users_manage') %}<a href="/users">Users</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      </div>
+    </nav>
+    <details class="profile-menu">
+      <summary class="profile-menu__trigger" aria-label="Open account menu" title="Account">
+        <span class="profile-avatar" aria-hidden="true">{{ user.username[:1]|upper }}</span>
+      </summary>
+      <div class="profile-menu__panel">
+        <div class="profile-menu__identity">
+          <span class="profile-avatar profile-avatar--large" aria-hidden="true">{{ user.username[:1]|upper }}</span>
+          <strong>Hi, {{ user.username }}!</strong>
+          <span>{{ user.role|replace('_', ' ')|title }}</span>
+        </div>
+        <a class="profile-menu__account" href="/account/password">Change password</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="button primary full">Sign out</button>
+        </form>
+      </div>
+    </details>
+  </header>
+  <script nonce="{{ csp_nonce(request) }}">
+    const navMenus = Array.from(document.querySelectorAll("details.nav-menu"));
+    const profileMenu = document.querySelector("details.profile-menu");
+
+    function positionNavMenu(menu) {
+      if (!menu.open) return;
+      const summary = menu.querySelector("summary");
+      const panel = menu.querySelector(".nav-menu__panel");
+      const subnav = menu.closest(".subnav");
+      const container = menu.closest(".subnav__inner");
+      if (!summary || !panel) return;
+
+      const margin = 12;
+      const summaryRect = summary.getBoundingClientRect();
+      const subnavRect = subnav ? subnav.getBoundingClientRect() : summaryRect;
+      const containerRect = container ? container.getBoundingClientRect() : subnavRect;
+      const top = subnavRect.bottom - containerRect.top + 6;
+      const maxHeight = Math.max(140, window.innerHeight - subnavRect.bottom - margin);
+
+      panel.style.maxHeight = `${maxHeight}px`;
+      const panelWidth = panel.getBoundingClientRect().width;
+      const maxLeft = window.innerWidth - panelWidth - margin;
+      const left = Math.min(Math.max(summaryRect.left, margin), Math.max(margin, maxLeft));
+
+      panel.style.top = `${top}px`;
+      panel.style.left = `${left - containerRect.left}px`;
+    }
+
+    navMenus.forEach((menu) => {
+      menu.addEventListener("toggle", () => {
+        if (!menu.open) return;
+        if (profileMenu) profileMenu.removeAttribute("open");
+        navMenus.forEach((otherMenu) => {
+          if (otherMenu !== menu) otherMenu.removeAttribute("open");
+        });
+        requestAnimationFrame(() => positionNavMenu(menu));
+      });
+    });
+
+    function positionOpenNavMenus() {
+      navMenus.forEach(positionNavMenu);
+    }
+
+    window.addEventListener("resize", positionOpenNavMenus);
+    window.addEventListener("scroll", positionOpenNavMenus, true);
+
+    if (profileMenu) {
+      profileMenu.addEventListener("toggle", () => {
+        if (!profileMenu.open) return;
+        navMenus.forEach((menu) => menu.removeAttribute("open"));
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      navMenus.forEach((menu) => {
+        if (!menu.contains(event.target)) menu.removeAttribute("open");
+      });
+      if (profileMenu && !profileMenu.contains(event.target)) {
+        profileMenu.removeAttribute("open");
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        navMenus.forEach((menu) => menu.removeAttribute("open"));
+        if (profileMenu) profileMenu.removeAttribute("open");
+      }
+    });
+    positionOpenNavMenus();
+  </script>
+  {% endif %}
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+  {% include "partials/xlsx_export_dialog.html" %}
+  <script src="/static/table-viewport.js?v=20260711-2"></script>
+  <script src="/static/searchable-select.js?v=20260711-director-picker-1"></script>
+  <script src="/static/autosave.js?v=20260708-gst-choice-1"></script>
+  <script src="/static/xlsx-export-dialog.js?v=20260709-gst-fields-1"></script>
+</body>
+</html>

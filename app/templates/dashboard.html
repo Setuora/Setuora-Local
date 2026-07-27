@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Today</p>
+    <h1>Operations</h1>
+  </div>
+  <div class="actions quick-actions">
+    {% if role_can(user, 'batch_purchase') %}
+    <a class="button primary" href="/batches/new?batch_type=PURCHASE">Purchase</a>
+    {% endif %}
+    {% if role_can(user, 'batch_sale') %}
+    <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
+    {% endif %}
+    {% if role_can(user, 'batch_audit') %}
+    <a class="button" href="/audit-assignments">Audits</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="metric-grid dashboard-metric-grid" data-live-url="{{ dashboard_live_url }}">
+  <div class="metric"><span>In stock</span><strong data-metric="in_stock">{{ counts.in_stock }}</strong></div>
+  <div class="metric"><span>Sold</span><strong data-metric="sold">{{ counts.sold }}</strong></div>
+  <div class="metric"><span>Today scans</span><strong data-metric="today_scans">{{ counts.today_scans }}</strong></div>
+  <div class="metric warn"><span>Pending sync</span><strong data-metric="pending_sync">{{ counts.pending_sync }}</strong></div>
+  <div class="metric danger"><span>Failed sync</span><strong data-metric="failed">{{ counts.failed }}</strong></div>
+  <div class="metric warn"><span>Shelf verification</span><strong data-metric="shelf_verification_pending">{{ counts.shelf_verification_pending }}</strong></div>
+  <div class="metric"><span>Total serials</span><strong data-metric="serials">{{ counts.serials }}</strong></div>
+</section>
+
+{% if has_role(user, 'super_admin', 'admin') %}
+<section class="panel director-panel dashboard-product-stock" id="product-stock">
+  <div class="section-title">
+    <div>
+      <p class="eyebrow">Inventory overview</p>
+      <h2>Product stock</h2>
+    </div>
+    <div class="director-live-tools">
+      <span>Current stock and cumulative purchase/sale totals</span>
+      <form method="get" action="/" class="director-stock-filter" data-product-stock-filter>
+        <select name="product_q" aria-label="Filter dashboard stock by product">
+          <option value="">All products</option>
+          {% for product in product_stock_options %}
+          <option value="{{ product.product_code }}" data-search="{{ product.product_code }} {{ product.product_name }}" {{ 'selected' if product_q == product.product_code }}>{{ product.product_code }} · {{ product.product_name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+  </div>
+  <div class="table-scroll director-table-scroll">
+    <table class="director-table product-stock-summary-table">
+      <thead><tr><th>Product</th><th>Product code</th><th>Current stock</th><th>Purchased (cumulative)</th><th>Sold (cumulative)</th><th>Last audit</th><th>Last audited qty</th><th>Nearest expiry</th></tr></thead>
+      <tbody data-dashboard-product-stock-rows>
+        {% set product_rows = product_stock_rows %}
+        {% include "partials/product_stock_summary_rows.html" %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if has_role(user, 'super_admin', 'admin') %}
+{% include "partials/dashboard_shelf_alerts.html" %}
+{% endif %}
+
+{% include "partials/dashboard_charts.html" %}
+{% include "partials/expiry_summary.html" %}
+
+<section class="split">
+  <div class="panel split-card">
+    <div class="section-title">
+      <h2>Recent batches</h2>
+      {% if role_can(user, 'batch_list') %}
+      <a href="/batches">View all</a>
+      {% endif %}
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
+        <tbody data-live-batches>
+          {% include "partials/dashboard_batches.html" %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel split-card">
+    <div class="section-title">
+      <h2>Recent scans</h2>
+      {% if role_can(user, 'page_reports') and role_can(user, 'reports_data') %}
+      <a href="/reports">Reports</a>
+      {% endif %}
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
+        <tbody data-live-scans>
+          {% include "partials/dashboard_scans.html" %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<script src="/static/director-report-filters.js?v=20260712-product-stock-1"></script>
+<script src="/static/live.js?v=20260712-product-stock-1"></script>
+{% endblock %}

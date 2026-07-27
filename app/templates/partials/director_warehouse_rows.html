@@ -1,0 +1,14 @@
+{% for row in report.warehouse_rows %}
+<tr>
+  <td><strong>{{ row.warehouse_level }}</strong></td>
+  <td>{{ row.warehouses }}</td>
+  <td>{{ row.products }}</td>
+  <td>{{ row.locations }}</td>
+  <td><span class="status {{ 'pending_sync' if row.unlocated else 'synced' }}">{{ row.unlocated }}</span></td>
+  <td><span class="status {{ 'missing' if row.expiring_soon else 'synced' }}">{{ row.expiring_soon }}</span></td>
+  <td>{{ report_date(row.nearest_expiry) if row.nearest_expiry else '-' }}</td>
+  <td><strong>{{ row.stock }}</strong></td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="empty">No stock available</td></tr>
+{% endfor %}

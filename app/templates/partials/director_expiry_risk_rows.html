@@ -1,0 +1,11 @@
+{% for row in report.expiry.risk_rows[:12] %}
+<tr>
+  <td><strong>{{ row.product_name }}</strong><small>{{ row.product_code }} · {{ row.warehouse }}</small></td>
+  <td>{{ row.batch }}</td>
+  <td>{{ row.stock }}</td>
+  <td>{{ row.unsold_stock }}</td>
+  <td><span class="status {{ row.risk_class }}">{{ row.risk }}</span></td>
+</tr>
+{% else %}
+<tr><td colspan="5" class="empty">No expiry risk found</td></tr>
+{% endfor %}

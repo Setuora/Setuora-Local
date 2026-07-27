@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Audit assignments - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Timed stock verification</p>
+    <h1>Audit assignments</h1>
+  </div>
+</section>
+
+{% if can_manage %}
+<section class="panel narrow">
+  <div class="section-title">
+    <h2>Assign a product audit</h2>
+  </div>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  <form method="post" action="/audit-assignments" class="stack">
+    <label>Product
+      <select name="product_id" required>
+        <option value="">Choose product</option>
+        {% for product in products %}
+        <option value="{{ product.id }}" {% if form.product_id == product.id|string %}selected{% endif %}>
+          {{ product.product_code }} - {{ product.product_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Auditor
+      <select name="auditor_id" required>
+        <option value="">Choose auditor</option>
+        {% for auditor in auditors %}
+        <option value="{{ auditor.id }}" {% if form.auditor_id == auditor.id|string %}selected{% endif %}>
+          {{ auditor.username }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="two-col">
+      <label>Starts at
+        <input type="datetime-local" name="starts_at" value="{{ form.starts_at or '' }}" required>
+      </label>
+      <label>Ends at
+        <input type="datetime-local" name="ends_at" value="{{ form.ends_at or '' }}" required>
+      </label>
+    </div>
+    <label>Instructions
+      <textarea name="notes" rows="3" placeholder="Area, rack, or audit notes">{{ form.notes or '' }}</textarea>
+    </label>
+    <button class="button primary full" type="submit">Assign audit</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="section-title">
+    <h2>{{ 'All assignments' if can_manage else 'My assignments' }}</h2>
+    <span>{{ rows|length }} total</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Auditor</th>
+          <th>Window (IST)</th>
+          <th>Status</th>
+          <th>Expected</th>
+          <th>Found</th>
+          <th>Remaining</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>
+            <strong>{{ row.assignment.product.product_name }}</strong><br>
+            <span class="muted">{{ row.assignment.product.product_code }}</span>
+          </td>
+          <td>{{ row.assignment.auditor.username }}</td>
+          <td>
+            {{ row.starts_local.strftime('%d %b %Y %H:%M') }}<br>
+            <span class="muted">to {{ row.ends_local.strftime('%d %b %Y %H:%M') }}</span>
+          </td>
+          <td><span class="status {{ row.progress.state|lower }}">{{ row.progress.state }}</span></td>
+          <td>{{ row.progress.expected }}</td>
+          <td>{{ row.progress.verified }}</td>
+          <td>{{ row.progress.pending }}</td>
+          <td class="col-actions">
+            <a class="button small" href="/batches/{{ row.latest_batch.id }}">Open audit</a>
+            {% if row.progress.state == 'ACTIVE' and row.latest_batch.status != 'DRAFT' %}
+            <a class="button small" href="/batches/new?batch_type=AUDIT&audit_assignment_id={{ row.assignment.id }}">New batch</a>
+            {% endif %}
+            {% if can_manage %}
+            <form method="post" action="/audit-assignments/{{ row.assignment.id }}/extend" class="inline-form audit-extend-form">
+              <input
+                type="datetime-local"
+                name="ends_at"
+                aria-label="New audit deadline"
+                title="New audit deadline"
+                value="{% if form.extend_assignment_id == row.assignment.id|string %}{{ form.extend_ends_at }}{% else %}{{ row.ends_local.strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
+                required
+              >
+              <button class="button small" type="submit">Extend</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No audit assignments yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

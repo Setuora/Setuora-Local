@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+{% block title %}{{ batch.batch_number }} - Setuora{% endblock %}
+{% block content %}
+{% set sale_return = sale_return_state|default({'pending_count': 0, 'pending_serials': []}, true) %}
+{% set sale_return_pending = sale_return.pending_count|default(0)|int %}
+{% set excel_import_types = tally_excel_import_types|default(['SALE', 'ISSUE', 'PURCHASE_RETURN'], true) %}
+{% set excel_export_types = tally_excel_export_types|default(['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN', 'PURCHASE_RETURN', 'ISSUE'], true) %}
+{% set first_summary_line = summary.lines[0] if summary.lines else none %}
+{% set tally_accounting_excel_fields = "Voucher Date|Voucher Type Name|Voucher Number|Buyer/Supplier - Address|Buyer/Supplier - Pincode|Ledger Name|Ledger Amount|Ledger Amount Dr/Cr|Item Name|Billed Quantity|Item Rate|Item Rate per|Disc%|Item Amount|Change Mode|Buyer/Supplier - GST Registration Type|Buyer/Supplier - GSTIN/UIN|Buyer/Supplier - Place of Supply|HSN/SAC Details|HSN/SAC|GST Rate Details|GST Taxability Type|GST Nature of Transaction|IGST Rate|CGST Rate|SGST/UTGST Rate|Taxable Value" %}
+{% set tally_summary_excel_fields = "Sl|Description of Goods|Product Code|Tally Stock Item|HSN/SAC|Quantity|Unit|Rate|Discount %|GST %|CGST %|SGST %|IGST %|Taxable Value|CGST Amount|SGST Amount|IGST Amount|Amount excl. GST" %}
+{% set tally_required_fields = tally_accounting_required_fields|default([], true) %}
+{% set tally_deselected_fields = tally_accounting_deselected_fields|default([], true) %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ batch.batch_type }}</p>
+    <h1>{{ batch.batch_number }}</h1>
+  </div>
+  <div class="actions">
+    <span class="status {{ batch.status|lower }}">{{ batch.status }}</span>
+    {% if batch.batch_type == 'AUDIT' and batch.status != 'DRAFT' %}
+    <a class="button" href="/batches/{{ batch.id }}/audit.pdf">Audit PDF</a>
+    {% endif %}
+    {% if batch.batch_type == 'SALE' and batch.items|length > 0 %}
+    <a class="button" href="/batches/{{ batch.id }}/preinvoice.pdf">Pre-invoice PDF</a>
+    {% endif %}
+    {% if can_tally_xml and batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] and batch.items|length > 0 %}
+    <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
+    {% endif %}
+    {% if can_tally_excel_export and batch.batch_type in excel_export_types and batch.items|length > 0 %}
+    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx" data-xlsx-export data-xlsx-title="Customize Tally Excel export" data-xlsx-parameters="voucher_type|voucher_number|party_ledger" data-xlsx-defaults='{{ {"voucher_number": batch_voucher_number(batch), "party_ledger": batch.party_name or ""}|tojson }}' data-xlsx-fields="{{ tally_accounting_excel_fields if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else tally_summary_excel_fields }}" data-xlsx-required-fields="{{ tally_required_fields|join('|') if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else '' }}" data-xlsx-deselected-fields="{{ tally_deselected_fields|join('|') if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else '' }}">Tally Excel</a>
+    {% endif %}
+    {% if can_view_batch_list %}
+    <a class="button" href="/batches">Batches</a>
+    {% endif %}
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if tally_excel_error %}<div class="alert error">{{ tally_excel_error }}</div>{% endif %}
+{% if tally_excel_message %}<div class="alert">{{ tally_excel_message }}</div>{% endif %}
+{% if batch.last_error %}<div class="alert warn">{{ batch.last_error }}</div>{% endif %}
+{% if batch.batch_type == 'AUDIT' and batch.audit_assignment %}
+<div class="alert">
+  Cumulative audit for <strong>{{ batch.audit_assignment.product.product_name }}</strong>.
+  Scans from every batch in this assignment are reconciled together; remaining stock becomes missing only after the audit deadline.
+</div>
+{% endif %}
+{% if shelf_state.controlled %}
+<div
+  id="shelf-verification-status"
+  class="alert {{ 'warn' if shelf_state.pending_count else '' }}"
+  data-pending="{{ shelf_state.pending_count }}"
+  data-controlled="true"
+>
+  {% if shelf_state.pending_count %}
+  {{ shelf_state.pending_count }} product{{ '' if shelf_state.pending_count == 1 else 's' }} awaiting shelf verification.
+  Scan the shelf QR before submitting{% if shelf_state.shelf_required %} or scanning another product{% endif %}.
+  {% else %}
+  Shelf placement is verified. Products with a configured interval will require a shelf QR scan.
+  {% endif %}
+</div>
+{% endif %}
+
+<section class="batch-layout">
+  <div class="panel scanner-panel">
+    <div class="section-title">
+      <h2>Scanner</h2>
+      <span id="scan-count" data-count="{{ batch.items|length }}">{{ batch.items|length }} scanned</span>
+    </div>
+    {% if batch.status == 'DRAFT' and can_edit_batch %}
+    <div class="scanner-box" id="scanner-box">
+      <video id="scanner-video" playsinline muted></video>
+      <div class="scan-overlay" id="scan-overlay">
+        <div class="scan-line"></div>
+        <div class="scan-corners">
+          <span class="corner tl"></span>
+          <span class="corner tr"></span>
+          <span class="corner bl"></span>
+          <span class="corner br"></span>
+        </div>
+        <p class="scan-label" id="scan-status-label">Initializing camera...</p>
+      </div>
+    </div>
+    <div class="scanner-tools" id="scanner-tools">
+      <button class="button primary" type="button" id="camera-button" aria-pressed="false">Start scanning</button>
+    </div>
+    {% if batch.batch_type == 'SALE' %}
+    <div class="sale-scan-actions" id="sale-scan-actions">
+      <button class="button primary" type="button" id="sale-mode-button" data-scan-mode-button="sale" aria-pressed="true">Sale</button>
+      <button class="button danger" type="button" id="return-mode-button" data-scan-mode-button="return" aria-pressed="false">Return</button>
+    </div>
+    <div
+      id="sale-return-status"
+      class="alert warn sale-return-status"
+      data-pending="{{ sale_return_pending }}"
+      {% if not sale_return_pending %}hidden{% endif %}
+    >
+      {% if sale_return_pending %}
+      {{ sale_return_pending }} returned product{{ '' if sale_return_pending == 1 else 's' }} waiting for shelf QR.
+      {% endif %}
+    </div>
+    {% endif %}
+    <form id="scan-form" method="post" action="/batches/{{ batch.id }}/scan" class="scan-form" data-can-manual="{{ 'true' if can_manual_scan else 'false' }}">
+      <input id="serial-input" name="serial_number" placeholder="Product or shelf QR code" autocomplete="off" required {% if not can_manual_scan %}type="hidden"{% endif %}>
+      <input id="scan-source" name="scan_source" type="hidden" value="{{ 'manual' if can_manual_scan else 'camera' }}">
+      <input id="scan-mode" name="scan_mode" type="hidden" value="sale">
+      {% if can_manual_scan %}
+      <button class="button primary" type="submit">Add</button>
+      {% endif %}
+    </form>
+    {% if can_fefo and batch.batch_type in ['ISSUE', 'PURCHASE_RETURN'] %}
+    <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form" id="fefo-form">
+      <div class="fefo-form__head">
+        <h3>FEFO picker</h3>
+      </div>
+      {% if fefo_error %}<div class="alert error">{{ fefo_error }}</div>{% endif %}
+      <div class="fefo-form__fields">
+        <label class="fefo-form__search">Search product
+          <input id="fefo-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name" {{ 'disabled' if products|length == 0 else '' }}>
+        </label>
+        <label class="fefo-form__product">{{ 'Sale product' if batch.batch_type == 'SALE' else 'FEFO product' }}
+          <select name="product_id" id="fefo-product-select" required {{ 'disabled' if products|length == 0 else '' }}>
+            {% if products|length == 0 %}
+            <option value="" selected>No in-stock products available</option>
+            {% endif %}
+            {% for product in products %}
+            <option
+              value="{{ product.id }}"
+              data-search="{{ product.product_code }} {{ product.product_name }} {{ product.nickname or '' }} {{ product.tally_stock_item_name }} {{ product.alternate_tally_stock_item_name or '' }}"
+              data-available="{{ product.available_quantity }}"
+            >{{ product.product_code }} - {{ product.product_name }}{% if product.nickname %} ({{ product.nickname }}){% endif %} - {{ product.available_quantity }} available</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="fefo-form__qty">Qty<input name="quantity" type="number" min="1" max="500" value="1" required {{ 'disabled' if products|length == 0 else '' }}></label>
+        <button class="button secondary" type="submit" {{ 'disabled' if products|length == 0 else '' }}>Pick FEFO</button>
+      </div>
+    </form>
+    {% endif %}
+    {% if can_tally_excel_import and batch.batch_type in excel_import_types %}
+    <form method="post" action="/batches/{{ batch.id }}/tally.xlsx/import" enctype="multipart/form-data" class="fefo-form">
+      <div class="fefo-form__head">
+        <h3>Tally Excel</h3>
+      </div>
+      <div class="fefo-form__fields">
+        <label class="fefo-form__search">Excel file
+          <input name="upload" type="file" accept=".xlsx,.xlsm" required>
+        </label>
+        <button class="button secondary" type="submit">Import Excel</button>
+      </div>
+    </form>
+    {% endif %}
+    {% elif batch.status == 'DRAFT' %}
+    <div class="empty">You have view-only access to this batch.</div>
+    {% else %}
+    <div class="empty">Batch submitted</div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="section-title">
+      <h2>Details</h2>
+    </div>
+    <dl class="details">
+      <dt>Party</dt><dd>{{ batch.party_name or '-' }}</dd>
+      {% if batch.batch_type == 'SALE' %}
+      <dt>GST registration</dt><dd>{{ batch.party_gst_registration_type or 'Unregistered/Consumer' }}</dd>
+      <dt>GST name</dt><dd>{{ batch.party_gst_name or '-' }}</dd>
+      <dt>GST number</dt><dd>{{ batch.party_gstin or '-' }}</dd>
+      <dt>Customer state</dt><dd>{{ batch.party_state or '-' }}</dd>
+      <dt>GST type</dt><dd>{{ 'IGST' if batch.gst_treatment == 'INTER_STATE' else 'CGST + SGST' }}</dd>
+      {% if batch.gst_treatment == 'INTER_STATE' %}
+      <dt>IGST %</dt><dd>{{ '%.2f'|format(first_summary_line.igst_rate) if first_summary_line else '-' }}</dd>
+      {% else %}
+      <dt>CGST %</dt><dd>{{ '%.2f'|format(first_summary_line.cgst_rate) if first_summary_line else '-' }}</dd>
+      <dt>SGST %</dt><dd>{{ '%.2f'|format(first_summary_line.sgst_rate) if first_summary_line else '-' }}</dd>
+      {% endif %}
+      {% endif %}
+      <dt>Reason</dt><dd>{{ batch.reason_code or '-' }}</dd>
+      <dt>{{ 'Sale started by' if batch.batch_type == 'SALE' else 'Created by' }}</dt><dd>{{ batch.user.username }}</dd>
+      <dt>Created</dt><dd>{{ report_date(batch.created_at) }}</dd>
+      <dt>Voucher number</dt><dd>{{ batch_voucher_number(batch) }}</dd>
+      <dt>Tally reference</dt><dd>{{ batch.tally_reference or '-' }}</dd>
+      <dt>Retry count</dt><dd>{{ batch.retry_count or 0 }}</dd>
+      <dt>Last retry</dt><dd>{{ report_date(batch.last_retry_at) if batch.last_retry_at else '-' }}</dd>
+    </dl>
+    {% if batch.status == 'DRAFT' and can_edit_batch %}
+    <form method="post" action="/batches/{{ batch.id }}/submit">
+      <button class="button success full" id="submit-batch-button" type="submit" {{ 'disabled' if batch.items|length == 0 or shelf_state.pending_count or sale_return_pending else '' }}>Submit batch</button>
+    </form>
+    {% elif can_retry_sync and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] %}
+    <form method="post" action="/batches/{{ batch.id }}/retry">
+      <button class="button primary full" type="submit">Retry Tally sync</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+{% if batch.batch_type != 'AUDIT' %}
+<section class="panel">
+  <div class="section-title">
+    <h2>{{ 'Sale items' if batch.batch_type == 'SALE' else 'Voucher preview' }}</h2>
+    <span id="voucher-line-count">{{ summary.lines|length }} product line{{ 's' if summary.lines|length != 1 else '' }}</span>
+  </div>
+  <div class="table-scroll">
+    <table id="voucher-preview-table" data-batch-id="{{ batch.id }}" data-batch-status="{{ batch.status }}" data-can-edit="{{ 'true' if batch.status == 'DRAFT' and can_edit_batch and batch.batch_type != 'AUDIT' else 'false' }}">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>HSN</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Discount</th>
+          <th>Taxable (excl. GST)</th>
+          <th>CGST</th>
+          <th>SGST</th>
+          <th>IGST</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="voucher-preview-body">
+        {% for line in summary.lines %}
+        <tr>
+          <td>
+            <strong>{{ line.product_name }}</strong>
+            <small>{{ line.tally_stock_item_name }}</small>
+          </td>
+          <td>{{ line.hsn }}</td>
+          <td>{{ line.quantity }} {{ line.unit }}</td>
+          <td>
+            {% if batch.status == 'DRAFT' and can_edit_batch %}
+            <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate">
+              <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(line.rate) }}">
+              <button class="button small" type="submit">Set</button>
+            </form>
+            {% else %}
+            {{ '%.2f'|format(line.rate) }}
+            {% endif %}
+          </td>
+          <td>
+            {{ '%.2f'|format(line.discount_rate) }}%
+            {% if line.discount_amount > 0 %}<small>-{{ '%.2f'|format(line.discount_amount) }}</small>{% endif %}
+          </td>
+          <td>{{ '%.2f'|format(line.taxable_value) }}</td>
+          <td>{{ '%.2f'|format(line.cgst_amount) }}</td>
+          <td>{{ '%.2f'|format(line.sgst_amount) }}</td>
+          <td>{{ '%.2f'|format(line.igst_amount) }}</td>
+          <td>{{ '%.2f'|format(line.line_total) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty">{{ 'Scan product QR codes to build the sale' if batch.batch_type == 'SALE' else 'Scan serials to build the voucher preview' }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot id="voucher-preview-foot" {% if not summary.lines %}hidden{% endif %}>
+        <tr><th colspan="6">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
+        <tr><th colspan="6">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
+        <tr><th colspan="6">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
+        <tr><th colspan="6">IGST</th><td colspan="4">{{ '%.2f'|format(summary.igst_amount) }}</td></tr>
+        <tr><th colspan="6">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
+        <tr class="grand-total"><th colspan="6">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+{% elif batch.status != 'DRAFT' %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Audit reconciliation</h2>
+    <span>{{ audit_summary.total }} findings</span>
+  </div>
+  <section class="metric-grid audit-grid">
+    <div class="metric"><span>Verified</span><strong>{{ audit_summary.verified }}</strong></div>
+    <div class="metric"><span>Pending</span><strong>{{ audit_summary.pending }}</strong></div>
+    <div class="metric danger"><span>Missing</span><strong>{{ audit_summary.missing }}</strong></div>
+    <div class="metric warn"><span>Extra</span><strong>{{ audit_summary.extra }}</strong></div>
+  </section>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Finding</th><th>Serial</th><th>Product</th><th>Expected</th><th>Scanned</th></tr></thead>
+      <tbody>
+        {% for finding in batch.audit_findings %}
+        <tr>
+          <td><span class="status {{ finding.finding_type|lower }}">{{ finding.finding_type }}</span></td>
+          <td>{{ finding.serial_number }}</td>
+          <td>{{ finding.product_name or '-' }}</td>
+          <td>{{ finding.expected_status or '-' }}</td>
+          <td>{{ finding.scanned_status or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No audit findings</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="section-title"><h2>Scanned serials</h2></div>
+  <div class="table-scroll">
+    <table id="scanned-serials-table" data-batch-id="{{ batch.id }}" data-batch-type="{{ batch.batch_type }}" data-batch-status="{{ batch.status }}" data-can-edit="{{ 'true' if batch.status == 'DRAFT' and can_edit_batch else 'false' }}">
+      <thead><tr><th>Serial</th><th>Product</th><th>Product batch</th><th>Expiry</th><th>Shelf</th><th>Status</th><th>Rate</th><th></th></tr></thead>
+      <tbody id="scanned-serials-body">
+        {% for item in batch.items %}
+        <tr>
+          <td>{{ item.serial.serial_number }}</td>
+          <td>{{ item.serial.product.product_name }}</td>
+          <td>
+            {{ item.serial.product_batch_number or '-' }}
+            {% if item.fefo_picked %}<small>FEFO picked</small>{% endif %}
+          </td>
+          <td>{{ report_date(item.serial.expiry_date) if item.serial.expiry_date else '-' }}</td>
+          <td>
+            {% if item.shelf_verified_at %}
+            <strong>{{ item.shelf_location.code }}</strong>
+            <small>Verified {{ report_date(item.shelf_verified_at) }}</small>
+            {% elif batch.batch_type in ['PURCHASE', 'RECEIVE', 'AUDIT'] and item.serial.product.shelf_verification_interval %}
+            <span class="status pending_sync">PENDING</span>
+            {% else %}
+            Not required
+            {% endif %}
+          </td>
+          <td><span class="status {{ item.serial.display_status|lower }}">{{ item.serial.display_status }}</span></td>
+          <td>
+            {% if batch.status == 'DRAFT' and can_edit_batch and batch.batch_type != 'AUDIT' %}
+            <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/items/{{ item.id }}/rate">
+              <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(item.rate if item.rate is not none else item.serial.product.default_rate) }}">
+              <button class="button small" type="submit">Set</button>
+            </form>
+            {% else %}
+            {{ item.rate if item.rate is not none else item.serial.product.default_rate }}
+            {% endif %}
+          </td>
+          <td>
+            {% if batch.status == 'DRAFT' and can_edit_batch %}
+            <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/delete">
+              <button class="button small ghost" type="submit">Remove</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No scans yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if can_view_attempts and batch.sync_attempts %}
+<section class="panel">
+  <div class="section-title"><h2>Sync attempts</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Status</th><th>Error</th><th></th></tr></thead>
+      <tbody>
+        {% for attempt in batch.sync_attempts %}
+        <tr>
+          <td>{{ report_date(attempt.created_at) }}</td>
+          <td><span class="status {{ attempt.status|lower }}">{{ attempt.status }}</span></td>
+          <td>{{ attempt.error or '-' }}</td>
+          <td><a href="/batches/{{ batch.id }}/sync-attempts/{{ attempt.id }}">Details</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% if fefo_error %}
+<script nonce="{{ csp_nonce(request) }}">
+  document.getElementById('fefo-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+</script>
+{% endif %}
+<script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    const input = document.getElementById("fefo-product-search");
+    const select = document.getElementById("fefo-product-select");
+    if (!input || !select) return;
+    const quantityInput = document.querySelector('#fefo-form input[name="quantity"]');
+    const options = Array.from(select.options);
+
+    function syncProductOptions() {
+      const query = input.value.trim().toLowerCase();
+      let firstVisible = null;
+      options.forEach((option) => {
+        const matches = !query || (option.dataset.search || option.textContent || "").toLowerCase().includes(query);
+        option.hidden = !matches;
+        if (matches && !firstVisible) firstVisible = option;
+      });
+      if (select.selectedOptions[0]?.hidden && firstVisible) {
+        select.value = firstVisible.value;
+      }
+      syncQuantityLimit();
+    }
+
+    function syncQuantityLimit() {
+      if (!quantityInput) return;
+      const available = Number(select.selectedOptions[0]?.dataset.available || 0);
+      if (!available) return;
+      quantityInput.max = String(Math.min(available, 500));
+      if (Number(quantityInput.value || 0) > available) {
+        quantityInput.value = String(available);
+      }
+    }
+
+    input.addEventListener("input", syncProductOptions);
+    select.addEventListener("change", syncQuantityLimit);
+    syncProductOptions();
+  })();
+</script>
+<script src="/static/zxing.min.js"></script>
+<script src="/static/scanner.js?v=20260705-scan-toast-1" data-batch-id="{{ batch.id }}"></script>
+{% endblock %}

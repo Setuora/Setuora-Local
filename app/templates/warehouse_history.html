@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Movement History - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Permanent audit trail</p>
+    <h1>Movement history</h1>
+  </div>
+  {% if role_can(user, 'stock_relocation') %}<a class="button primary" href="/warehouse/move">Move stock</a>{% endif %}
+</section>
+
+<section class="panel">
+  <form method="get" class="search">
+    <input name="q" value="{{ q }}" placeholder="Reference, SKU, product, or batch">
+    <button class="button" type="submit">Search</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="table-scroll">
+    <table class="movement-history-table">
+      <thead><tr><th>Date & time</th><th>Reference</th><th>Product / batch</th><th>Qty</th><th>Previous location</th><th>New location</th><th>User</th><th>Reason</th><th>Device</th></tr></thead>
+      <tbody>
+        {% for row in relocations %}
+        <tr>
+          <td>{{ row.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td><strong>{{ row.reference_number }}</strong></td>
+          <td>{{ row.product.product_name }}<small>{{ row.product.product_code }} · {{ row.product_batch_number or 'No batch' }}</small></td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.previous_location_snapshot }}</td>
+          <td>{{ row.new_location_snapshot }}</td>
+          <td>{{ row.user.username }}</td>
+          <td>{{ row.reason or '-' }}</td>
+          <td class="device-cell">{{ row.device_used }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No stock movements recorded</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

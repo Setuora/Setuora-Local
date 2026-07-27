@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Audit Report - Setuora{% endblock %}
+{% block content %}
+<section class="page-head director-head">
+  <div>
+    <p class="eyebrow">Audit report</p>
+    <h1>{{ report.batch.batch_number }}</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/reports">Back to reports</a>
+  </div>
+</section>
+
+<section class="metric-grid director-detail-grid">
+  <div class="metric director-date-metric">
+    <span>Audit date and time</span>
+    <strong>{{ report_date(report.audit_at) if report.audit_at else '-' }}</strong>
+  </div>
+  <div class="metric">
+    <span>Audited by</span>
+    <strong>{{ report.audited_by }}</strong>
+  </div>
+  <div class="metric">
+    <span>Pending stock</span>
+    <strong>{{ report.pending }}</strong>
+  </div>
+  <div class="metric danger">
+    <span>Missing stock</span>
+    <strong>{{ report.missing }}</strong>
+  </div>
+  <div class="metric warn">
+    <span>Extra stock</span>
+    <strong>{{ report.extra }}</strong>
+  </div>
+</section>
+
+<section class="panel director-panel">
+  <div class="section-title">
+    <h2>Product-wise missing and extra</h2>
+    <span>Products with difference</span>
+  </div>
+  <div class="table-scroll director-table-scroll">
+    <table class="director-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Product code</th>
+          <th>Pending</th>
+          <th>Missing</th>
+          <th>Extra</th>
+          <th>Verified</th>
+          <th>Total checked</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.product_rows %}
+        <tr>
+          <td><strong>{{ row.product_name }}</strong></td>
+          <td>{{ row.product_code }}</td>
+          <td><span class="status {{ 'pending_sync' if row.pending else 'synced' }}">{{ row.pending }}</span></td>
+          <td><span class="status {{ 'missing' if row.missing else 'synced' }}">{{ row.missing }}</span></td>
+          <td><span class="status {{ 'extra' if row.extra else 'synced' }}">{{ row.extra }}</span></td>
+          <td>{{ row.verified }}</td>
+          <td>{{ row.total }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No pending, missing, or extra stock in this audit</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel director-panel">
+  <div class="section-title">
+    <h2>Missing and extra items</h2>
+    <span>Serial-wise check list</span>
+  </div>
+  <div class="table-scroll director-table-scroll">
+    <table class="director-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Serial</th>
+          <th>Product</th>
+          <th>Product code</th>
+          <th>Expected</th>
+          <th>Scanned</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.finding_rows %}
+        <tr>
+          <td><span class="status {{ row.type|lower }}">{{ row.type }}</span></td>
+          <td>{{ row.serial_number }}</td>
+          <td><strong>{{ row.product_name }}</strong></td>
+          <td>{{ row.product_code }}</td>
+          <td>{{ row.expected_status }}</td>
+          <td>{{ row.scanned_status }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No item differences found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

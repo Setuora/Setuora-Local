@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Barcode Replacement - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Labels</p>
+    <h1>Barcode Replacement</h1>
+  </div>
+  {% if replacement and role_can(user, 'label_files') %}
+  <a class="button primary" href="/serials/labels?ids={{ replacement.id }}">Print new label</a>
+  {% endif %}
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if replacement %}<div class="alert">Replacement created: {{ replacement.serial_number }}</div>{% endif %}
+
+<section class="panel narrow">
+  <form method="post" action="{{ request.url.path }}" class="stack">
+    <label>Old serial<input name="old_serial_number" placeholder="SG001-000001" required></label>
+    <label>New serial<input name="new_serial_number" placeholder="Leave blank to auto-generate"></label>
+    <label>Reason<textarea name="reason" rows="3" placeholder="Damaged label, reprint request, etc."></textarea></label>
+    <button class="button primary full" type="submit">Replace barcode</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Replacement history</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Serial</th><th>Status</th><th>Message</th><th>User</th></tr></thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td>{{ log.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ log.serial_number_raw }}</td>
+          <td><span class="status {{ log.status|lower }}">{{ log.status }}</span></td>
+          <td>{{ log.message or '-' }}</td>
+          <td>{{ log.user.username }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No replacements yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

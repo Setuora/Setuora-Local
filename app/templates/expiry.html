@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Expiry - Setuora{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Expiry management</p>
+    <h1>Expiry Control</h1>
+  </div>
+  <div class="actions">
+    {% if role_can(user, 'barcode_assignment') %}
+    <a class="button primary" href="/barcode-assignment">Product batch entry</a>
+    {% endif %}
+    {% if role_can(user, 'batch_sale') %}
+    <a class="button" href="/batches/new?batch_type=SALE">FEFO sale</a>
+    {% endif %}
+  </div>
+</section>
+
+{% include "partials/expiry_summary.html" %}
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Slow-moving expiry risk</h2>
+    <span>Forecast uses current stock, sales velocity, and expiry date</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Batch</th>
+          <th>Stock</th>
+          <th>Sales/month</th>
+          <th>Expiry</th>
+          <th>Expected sales</th>
+          <th>Unsold</th>
+          <th>Risk</th>
+          <th>Basis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in expiry.risk_rows %}
+        <tr>
+          <td>{{ row.product_name }}<small>{{ row.product_code }} - {{ row.warehouse }}</small></td>
+          <td>{{ row.batch }}</td>
+          <td>{{ row.stock }}</td>
+          <td>{{ row.sales_per_month }}</td>
+          <td>{{ row.expiry_date.strftime('%d %b %Y') }}<small>{{ row.months_left }} months</small></td>
+          <td>{{ row.expected_sales }}</td>
+          <td>{{ row.unsold_stock }}</td>
+          <td><span class="status {{ row.risk_class }}">{{ row.risk }}</span></td>
+          <td>{{ row.risk_basis }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No expiry risk forecast yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="split">
+  <div class="panel split-card">
+    <div class="section-title"><h2>Sleeping stock report</h2></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Product</th><th>Stock</th><th>Last sale</th><th>Status</th><th>Basis</th></tr></thead>
+        <tbody>
+          {% for row in expiry.sleeping_stock %}
+          <tr>
+            <td>{{ row.product_name }}</td>
+            <td>{{ row.stock }}</td>
+            <td>{{ row.last_sale }}</td>
+            <td><span class="status {{ row.status_class }}">{{ row.status }}</span></td>
+            <td>{{ row.stock_basis }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No sleeping stock over 30 days</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel split-card">
+    <div class="section-title"><h2>Warehouse expiry heatmap</h2></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Warehouse</th><th>Expiring value</th><th>Qty</th><th>Heat</th></tr></thead>
+        <tbody>
+          {% for row in expiry.warehouse_heatmap %}
+          <tr>
+            <td>{{ row.warehouse }}</td>
+            <td>Rs {{ '%.0f'|format(row.value) }}</td>
+            <td>{{ row.qty }}</td>
+            <td><span class="heatmap-bar"><span style="width: {{ row.percent }}%;"></span></span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">No warehouse expiry exposure</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% for batch in recent_batches %}
+<tr>
+  <td>
+    {% if user is defined and role_can_view_batch(user, batch.batch_type) %}
+    <a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a>
+    {% else %}
+    {{ batch.batch_number }}
+    {% endif %}
+  </td>
+  <td>{{ batch.batch_type }}</td>
+  <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
+  <td>{{ batch.items|length }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="empty">No batches yet. Start with Purchase to bring stock in.</td></tr>
+{% endfor %}

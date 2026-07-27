@@ -1,0 +1,32 @@
+<dialog id="xlsx-export-dialog" class="modal xlsx-export-dialog" aria-labelledby="xlsx-export-title">
+  <div class="modal__head">
+    <div>
+      <h2 id="xlsx-export-title">Customize Excel export</h2>
+      <small class="muted">Adjust filters and choose the columns to include.</small>
+    </div>
+    <button class="button ghost modal__close" type="button" data-xlsx-close aria-label="Close">&times;</button>
+  </div>
+  <form class="modal__body stack" data-xlsx-form>
+    <section data-xlsx-parameter-section>
+      <div class="xlsx-export-section-head">
+        <h3>Parameters</h3>
+      </div>
+      <div class="two-col xlsx-export-parameters" data-xlsx-parameters></div>
+    </section>
+    <section>
+      <div class="xlsx-export-section-head">
+        <h3>Fields</h3>
+        <div class="xlsx-export-field-actions">
+          <button class="button small ghost" type="button" data-xlsx-select-all>Select all</button>
+          <button class="button small ghost" type="button" data-xlsx-clear-all>Clear</button>
+        </div>
+      </div>
+      <div class="xlsx-export-fields" data-xlsx-fields></div>
+      <p class="alert error" data-xlsx-error hidden>Choose at least one field.</p>
+    </section>
+    <div class="xlsx-export-actions">
+      <button class="button ghost" type="button" data-xlsx-close>Cancel</button>
+      <button class="button primary" type="submit">Export Excel</button>
+    </div>
+  </form>
+</dialog>

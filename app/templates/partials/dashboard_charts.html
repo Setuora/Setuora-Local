@@ -1,0 +1,44 @@
+<section class="chart-grid" data-live-charts>
+  <div class="chart-card chart-card--donut">
+    <div class="chart-head">
+      <div>
+        <h2>QR status mix</h2>
+        <p>{{ stock_chart.total }} serials</p>
+      </div>
+    </div>
+    <div class="chart-body">
+      <div class="donut" style="--chart-bg: {{ stock_chart.gradient }};" aria-label="QR status mix chart">
+        <span>{{ stock_chart.total }}</span>
+      </div>
+      <div class="chart-legend">
+        {% for item in stock_chart.slices %}
+        <div class="legend-row">
+          <span class="swatch" style="--swatch: {{ item.color }};"></span>
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </div>
+        {% else %}
+        <p class="chart-empty">No QR data yet</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Scan activity</h2>
+        <p>Last 7 days</p>
+      </div>
+      <strong>{{ scan_activity_chart.total }}</strong>
+    </div>
+    <div class="bar-list">
+      {% for item in scan_activity_chart.bars %}
+      <div class="bar-row">
+        <span>{{ item.label }}</span>
+        <div class="bar-track"><span class="bar-fill" style="--bar: {{ item.percent }}%; --bar-color: {{ item.color }};"></span></div>
+        <strong>{{ item.value }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,749 @@
+# QR Inventory & Tally Integration System
+
+## Software Requirements Specification (SRS)
+
+**Version:** 1.0
+**Prepared For:** Swarnagowri Foods & Beverages
+**Prepared By:** Dijo S Benelen
+
+---
+
+# 1. Executive Summary
+
+Develop a QR-code based inventory transaction system integrated with Tally Prime.
+
+The system will allow warehouse staff, purchase staff, sales staff, and auditors to scan product QR codes using mobile phones and automatically update inventory movements.
+
+Tally Prime remains the master system for:
+
+* Inventory Management
+* Accounting
+* Purchase Entries
+* Sales Entries
+* Stock Reports
+* GST Reports
+
+The QR system acts as a transaction and traceability layer on top of Tally.
+
+---
+
+# 2. Project Objectives
+
+The system shall:
+
+* Generate unique QR codes for products
+* Assign QR codes to existing and new inventory
+* Scan products using mobile phones
+* Update Tally automatically
+* Maintain serial-level traceability
+* Track stock movement history
+* Support purchase, sale, returns, issue, and audit operations
+* Detect missing inventory during audits
+* Maintain transaction logs
+* Minimize manual stock entry
+
+---
+
+# 3. System Architecture
+
+```text
+QR Label
+    ↓
+Mobile Phone Camera
+    ↓
+Web Application
+    ↓
+Python Backend
+    ↓
+Local Database
+    ↓
+Tally Prime XML API
+    ↓
+Tally Prime
+```
+
+---
+
+# 4. Technology Stack
+
+## Frontend
+
+* HTML5
+* Bootstrap
+* JavaScript
+* Progressive Web App (PWA)
+
+## Backend
+
+* Python FastAPI
+
+## Database
+
+Initial Deployment:
+
+* SQLite
+
+Future Upgrade:
+
+* MySQL / PostgreSQL
+
+## Integration
+
+* Tally Prime XML API
+
+---
+
+# 5. User Roles
+
+## Super Admin
+
+Permissions:
+
+* Manage users
+* Configure Tally
+* Generate QR codes
+* Product management
+* View reports
+* View logs
+* Backup and restore
+
+---
+
+## Admin
+
+Permissions:
+
+* Product management
+* QR generation
+* Reports
+* Stock lookup
+* Transaction history
+
+---
+
+## Purchase User
+
+Permissions:
+
+* Purchase entries
+* Purchase returns
+* View own transactions
+
+---
+
+## Sales User
+
+Permissions:
+
+* Sales entries
+* Sales returns
+* View own transactions
+
+---
+
+## Auditor
+
+Permissions:
+
+* Audit inventory
+* Verify stock
+* Generate audit reports
+
+---
+
+# 6. Product Master
+
+Required Fields:
+
+| Field        |
+| ------------ |
+| Product Code |
+| Product Name |
+| Category     |
+| HSN          |
+| GST          |
+| Unit         |
+
+Example:
+
+Product Code: SG001
+
+Product Name: Turmeric Powder 100g
+
+---
+
+# 7. Serial Number Structure
+
+Every product unit receives a unique serial number.
+
+Examples:
+
+SG001-000001
+
+SG001-000002
+
+SG001-000003
+
+SG001-000004
+
+Rules:
+
+* Serial numbers must be unique.
+* Duplicate serial numbers are not allowed.
+* Serial numbers cannot be reused.
+
+---
+
+# 8. QR Code Specification
+
+QR Code Content:
+
+SG001-000001
+
+QR code should only contain:
+
+* Unique Serial Number
+
+QR code must not contain:
+
+* Price
+* GST
+* Customer Data
+* Sensitive Information
+
+---
+
+# 9. QR Generation Module
+
+Admin selects:
+
+* Product
+* Quantity
+
+Example:
+
+Product: SG001
+
+Quantity: 1000
+
+System generates:
+
+SG001-000001
+
+to
+
+SG001-001000
+
+Outputs:
+
+* QR Labels
+* PDF Export
+* Excel Export
+
+---
+
+# 10. Existing Inventory QR Assignment
+
+The business already has products in Tally.
+
+The system must support assigning QR codes to existing stock.
+
+Workflow:
+
+Select Existing Product
+
+↓
+
+Enter Quantity
+
+↓
+
+Generate Serial Numbers
+
+↓
+
+Generate QR Labels
+
+↓
+
+Link Serial Numbers To Product
+
+No need to recreate products.
+
+---
+
+# 11. Supported Transactions
+
+The system must support:
+
+* Purchase
+* Sale
+* Purchase Return
+* Sales Return
+* Stock Issue
+* Audit
+* QR Assignment
+* QR Replacement
+
+---
+
+# 12. Inventory Statuses
+
+Each serial number must have a status.
+
+Available statuses:
+
+* GENERATED
+* RECEIVED
+* IN_STOCK
+* SOLD
+* RETURNED
+* PURCHASE_RETURN
+* ISSUED
+* AUDITED
+* DAMAGED
+* MISSING
+* REPLACED
+
+---
+
+# 13. Purchase Workflow
+
+Purchase User
+
+Scan Product
+
+↓
+
+Purchase Entry
+
+↓
+
+Update Database
+
+↓
+
+Update Tally
+
+Status:
+
+RECEIVED
+
+IN_STOCK
+
+---
+
+# 14. Sales Workflow
+
+Sales User
+
+Scan Product
+
+↓
+
+Sales Entry
+
+↓
+
+Update Database
+
+↓
+
+Update Tally
+
+Status:
+
+SOLD
+
+---
+
+# 15. Sales Return Workflow
+
+Scan Product
+
+↓
+
+Sales Return
+
+↓
+
+Select Return Type
+
+Options:
+
+* Good Condition
+* Damaged
+* Expired
+
+Good Condition:
+
+RETURNED
+
+IN_STOCK
+
+Damaged:
+
+DAMAGED
+
+Update Tally accordingly.
+
+---
+
+# 16. Purchase Return Workflow
+
+Scan Product
+
+↓
+
+Purchase Return
+
+↓
+
+Update Tally
+
+Status:
+
+PURCHASE_RETURN
+
+---
+
+# 17. Stock Issue Workflow
+
+Use Cases:
+
+* Samples
+* Marketing
+* Office Use
+* Production Use
+* Free Distribution
+
+Workflow:
+
+Scan Product
+
+↓
+
+Issue Entry
+
+↓
+
+Select Reason
+
+↓
+
+Update Tally
+
+Status:
+
+ISSUED
+
+---
+
+# 18. Audit Workflow
+
+Auditor starts audit session.
+
+Scan all physical inventory.
+
+System compares:
+
+Expected Inventory
+
+vs
+
+Scanned Inventory
+
+Generate:
+
+* Verified Items
+* Missing Items
+* Extra Items
+
+---
+
+# 19. QR Replacement Workflow
+
+For damaged labels.
+
+Workflow:
+
+Search Existing Serial
+
+↓
+
+Generate New QR
+
+↓
+
+Print Replacement
+
+↓
+
+Maintain History
+
+Old QR:
+
+Inactive
+
+New QR:
+
+Active
+
+---
+
+# 20. Mobile Requirements
+
+Must work on:
+
+* Android Chrome
+* Android Edge
+* Desktop Chrome
+
+No dedicated Android application required.
+
+Features:
+
+* Login
+* QR Scan
+* Transaction Submission
+
+Simple interface with large buttons.
+
+---
+
+# 21. Database Tables
+
+## Users
+
+* ID
+* Username
+* Password Hash
+* Role
+* Status
+
+## Products
+
+* ID
+* Product Code
+* Product Name
+* HSN
+* GST
+* Unit
+
+## Inventory
+
+* Serial Number
+* Product ID
+* Current Status
+* Created Date
+
+## Transactions
+
+* ID
+* Serial Number
+* Action
+* User
+* Date
+* Time
+* Remarks
+* Tally Reference
+
+## Settings
+
+* Tally IP
+* Tally Port
+* Company Name
+
+---
+
+# 22. Tally Integration
+
+The following transactions must update Tally:
+
+* Purchase
+* Sale
+* Purchase Return
+* Sales Return
+* Stock Issue
+* Stock Adjustment
+
+Integration Method:
+
+* XML API
+
+---
+
+# 23. Offline & Failure Handling
+
+If Tally is unavailable:
+
+Transaction stored locally.
+
+Status:
+
+PENDING_SYNC
+
+System automatically retries synchronization.
+
+Admin can manually retry failed transactions.
+
+---
+
+# 24. Search Features
+
+Search By:
+
+* Serial Number
+* Product Code
+* Product Name
+* User
+* Transaction Type
+* Date
+
+---
+
+# 25. Reports
+
+Required Reports:
+
+* Daily Transactions
+* Purchase Report
+* Sales Report
+* Purchase Return Report
+* Sales Return Report
+* Audit Report
+* Missing Inventory Report
+* Pending Sync Report
+
+Export Formats:
+
+* Excel
+* CSV
+
+---
+
+# 26. Business Rules
+
+### BR-01
+
+Serial numbers must be unique.
+
+### BR-02
+
+A sold item cannot be sold again.
+
+### BR-03
+
+Purchase-returned inventory cannot be sold.
+
+### BR-04
+
+Serial generation must continue from the last generated number.
+
+Example:
+
+Existing:
+
+SG001-000500
+
+Next:
+
+SG001-000501
+
+### BR-05
+
+Every transaction must be logged.
+
+Store:
+
+* User
+* Timestamp
+* Action
+* Serial Number
+
+### BR-06
+
+Complete history must be maintained for every serial number.
+
+### BR-07
+
+Failed Tally updates must be queued and retried automatically.
+
+### BR-08
+
+Support assigning QR codes to products already present in Tally.
+
+### BR-09
+
+Bulk QR generation from Excel must be supported.
+
+### BR-10
+
+Phone camera scanning is mandatory.
+
+No dedicated barcode scanner required.
+
+---
+
+# 27. Security
+
+Required:
+
+* Password Hashing
+* Role-Based Access Control
+* Session Timeout
+* Login Audit Trail
+* Transaction Audit Trail
+
+---
+
+# 28. Performance Requirements
+
+Target Performance:
+
+* Scan Processing < 2 Seconds
+* Tally Update < 5 Seconds
+
+Capacity:
+
+* 10 Concurrent Users
+* 100,000+ Scan Records
+
+---
+
+# 29. Future Expansion Requirements
+
+The architecture should allow future addition of:
+
+* Multiple Warehouses
+* Distributor Portal
+* Android Application
+* WhatsApp Notifications
+* Expiry Tracking
+* Batch Tracking
+* GPS Tracking
+* GST Billing Integration
+* E-Way Bill Integration
+
+---
+
+# 30. Deliverables
+
+Developer must provide:
+
+1. Complete Source Code
+2. Database Schema
+3. Installation Guide
+4. Deployment Guide
+5. Tally Integration Documentation
+6. User Manual
+7. Backup Procedure
+8. Restore Procedure
+9. Bug Fix Support
+
+---
+
+# Final Project Goal
+
+Build a QR-based inventory transaction platform integrated with Tally Prime that enables Purchase, Sale, Returns, Issue, and Audit operations through mobile phone QR scanning while maintaining complete serial-level traceability and transaction history for every product unit.
+

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ batch.batch_number }} - Setuora{% endblock %}
+{% block content %}
+{% set serial_excel_fields = "Product Code|Product Name|Tally Stock Item|Serial Number|Product Batch|Mfg Date|Expiry Date|Warehouse|Warehouse Level|Status|Created At" %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">QR assignment</p>
+    <h1>{{ batch.batch_number }}</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/barcode-assignment/{{ batch.id }}/serials.xlsx" data-xlsx-export data-xlsx-title="Customize barcode export" data-xlsx-fields="{{ serial_excel_fields }}">Download Excel</a>
+    {% set label_pdf_action = '/barcode-assignment/' ~ batch.id ~ '/labels.pdf' %}
+    <a class="button" href="{{ label_pdf_action }}" data-label-pdf-open>Download labels PDF</a>
+    <a class="button" href="/barcode-assignment">Assignments</a>
+  </div>
+</section>
+
+<section class="panel">
+  <dl class="details">
+    <dt>Source</dt><dd>{{ batch.reason_code or '-' }}</dd>
+    <dt>Created by</dt><dd>{{ batch.user.username }}</dd>
+    <dt>Created</dt><dd>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</dd>
+    <dt>Total QR labels</dt><dd>{{ batch.items|length }}</dd>
+    <dt>Notes</dt><dd>{{ batch.notes or '-' }}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Generated QR labels</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Serial</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Status</th><th>Label</th></tr></thead>
+      <tbody>
+        {% for item in batch.items %}
+        <tr>
+          <td>
+            {% if role_can(user, 'serial_data') %}
+            <a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a>
+            {% else %}
+            {{ item.serial.serial_number }}
+            {% endif %}
+          </td>
+          <td>{{ item.serial.product.product_code }} - {{ item.serial.product.product_name }}</td>
+          <td>{{ item.serial.product_batch_number or '-' }}<small>{{ item.serial.warehouse or '' }}{% if item.serial.warehouse %} · {{ item.serial.warehouse_level }}{% endif %}</small></td>
+          <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
+          <td><span class="status {{ item.serial.display_status|lower }}">{{ item.serial.display_status }}</span></td>
+          <td>{% if role_can(user, 'label_files') %}<a href="/serials/labels?ids={{ item.serial.id }}">Open</a>{% else %}-{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No QR labels generated</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% include "partials/label_pdf_dialog.html" %}
+<script src="/static/label-pdf-dialog.js"></script>
+{% endblock %}
