@@ -1,3 +1,3 @@
-module github.com/Dijo-404/Proj_Setu/installer
+module github.com/Setuora/Setuora-Local/installer
 
 go 1.22

@@ -4,21 +4,42 @@ import "testing"
 
 func TestSetuoraRemoteVariants(t *testing.T) {
 	valid := []string{
-		"https://github.com/Dijo-404/Proj_Setu.git",
-		"https://github.com/Dijo-404/Proj_Setu/",
-		"git@github.com:Dijo-404/Proj_Setu.git",
-		"ssh://git@github.com/Dijo-404/Proj_Setu.git",
+		"https://github.com/Setuora/Setuora-Local.git",
+		"https://github.com/Setuora/Setuora-Local/",
+		"git@github.com:Setuora/Setuora-Local.git",
+		"ssh://git@github.com/Setuora/Setuora-Local.git",
 	}
 	for _, remote := range valid {
 		if !isSetuoraRemote(remote) {
 			t.Errorf("expected valid Setuora remote: %s", remote)
 		}
 	}
-	if isSetuoraRemote("https://github.com/example/Proj_Setu.git") {
+	if isSetuoraRemote("https://github.com/example/Setuora-Local.git") {
 		t.Fatal("accepted an unrelated repository")
 	}
-	if isSetuoraRemote("http://github.com/Dijo-404/Proj_Setu.git") {
+	if isSetuoraRemote("http://github.com/Setuora/Setuora-Local.git") {
 		t.Fatal("accepted an insecure HTTP repository")
+	}
+	if isSetuoraRemote("https://github.com/Dijo-404/Proj_Setu.git") {
+		t.Fatal("accepted the retired Setuora repository")
+	}
+}
+
+func TestLegacySetuoraRemoteIsRecognizedOnlyForMigration(t *testing.T) {
+	valid := []string{
+		"https://github.com/Dijo-404/Proj_Setu.git",
+		"git@github.com:Dijo-404/Proj_Setu.git",
+	}
+	for _, remote := range valid {
+		if !isLegacySetuoraRemote(remote) {
+			t.Errorf("expected legacy Setuora remote: %s", remote)
+		}
+	}
+	if isLegacySetuoraRemote("http://github.com/Dijo-404/Proj_Setu.git") {
+		t.Fatal("accepted an insecure legacy repository URL")
+	}
+	if isLegacySetuoraRemote("https://github.com/example/Proj_Setu.git") {
+		t.Fatal("accepted an unrelated legacy repository")
 	}
 }
 

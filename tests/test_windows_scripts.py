@@ -85,6 +85,18 @@ def test_updater_preserves_clean_diverged_history_before_realigning():
     assert "$worktreeChanges = @(& git status --porcelain)" in update_script
 
 
+def test_updater_accepts_only_the_official_repository():
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
+
+    assert "github.com/Setuora/Setuora-Local.git" in update_script
+    assert r"https://github\.com/|git@github\.com:|ssh://git@github\.com/" in update_script
+    assert "Dijo-404/Proj_Setu" in update_script
+    assert "git remote set-url origin https://github.com/Setuora/Setuora-Local.git" in update_script
+    assert update_script.index("Dijo-404/Proj_Setu") < update_script.index(
+        "git remote set-url origin https://github.com/Setuora/Setuora-Local.git"
+    )
+
+
 def test_updater_starts_services_without_changing_current_source():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 

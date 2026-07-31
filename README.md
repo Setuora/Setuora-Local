@@ -26,7 +26,7 @@ Setuora is a LAN-first barcode transaction bridge for Tally Prime. It lets staff
 ## Folder Structure
 
 ```text
-Proj_Setu/
+Setuora-Local/
 |-- README.md                         Project guide and setup notes
 |-- Setuora.exe                       Unified Windows setup and control tool
 |-- scripts/                          Windows workflows used by Setuora.exe
@@ -112,7 +112,7 @@ and a fresh verified backup without disclosing secrets.
 ## 1. Open The Project Folder
 
 ```bash
-cd /home/dj/Projects/Proj_Setu
+cd /home/dj/Projects/Setuora/Setuora-Local
 ```
 
 On Windows, use the folder where this project is copied, for example:

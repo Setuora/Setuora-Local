@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	repositoryURL = "https://github.com/Dijo-404/Proj_Setu.git"
+	repositoryURL = "https://github.com/Setuora/Setuora-Local.git"
 	defaultBranch = "main"
 )
 
@@ -364,7 +364,12 @@ func synchronizeRepository(gitPath, installDir, branch string) error {
 	if err != nil {
 		return fmt.Errorf("read the Setuora Git remote: %w", err)
 	}
-	if !isSetuoraRemote(remote) {
+	if isLegacySetuoraRemote(remote) {
+		fmt.Printf("Migrating the retired Setuora origin to %s...\n", repositoryURL)
+		if err := runGitVisible(gitPath, installDir, "remote", "set-url", "origin", repositoryURL); err != nil {
+			return fmt.Errorf("migrate the Setuora Git remote: %w", err)
+		}
+	} else if !isSetuoraRemote(remote) {
 		return fmt.Errorf("the existing origin remote is %q, expected %s", strings.TrimSpace(remote), repositoryURL)
 	}
 
@@ -590,6 +595,14 @@ func relaunchElevated(options installerOptions) error {
 }
 
 func isSetuoraRemote(remote string) bool {
+	return normalizedGitHubRemote(remote) == "github.com/setuora/setuora-local"
+}
+
+func isLegacySetuoraRemote(remote string) bool {
+	return normalizedGitHubRemote(remote) == "github.com/dijo-404/proj_setu"
+}
+
+func normalizedGitHubRemote(remote string) string {
 	normalized := strings.ToLower(strings.TrimSpace(remote))
 	normalized = strings.TrimSuffix(normalized, "/")
 	normalized = strings.TrimSuffix(normalized, ".git")
@@ -601,7 +614,7 @@ func isSetuoraRemote(remote string) bool {
 	case strings.HasPrefix(normalized, "git@github.com:"):
 		normalized = "github.com/" + strings.TrimPrefix(normalized, "git@github.com:")
 	}
-	return normalized == "github.com/dijo-404/proj_setu"
+	return normalized
 }
 
 func powershellQuote(value string) string {

@@ -180,7 +180,7 @@ if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
     throw "Git was not found. Install Git for Windows, then run scripts\update.bat again."
 }
 if (-not (Test-Path (Join-Path $ProjectRoot ".git"))) {
-    throw "'$ProjectRoot' is not a Git checkout. Clone https://github.com/Dijo-404/Proj_Setu.git before using scripts\update.bat."
+    throw "'$ProjectRoot' is not a Git checkout. Clone https://github.com/Setuora/Setuora-Local.git before using scripts\update.bat."
 }
 if (-not (Test-Path $VenvPython)) {
     throw "Setuora is not set up yet. Run scripts\setup.bat first."
@@ -200,10 +200,19 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($branch)) {
 
 $originUrl = (@(& git remote get-url origin) -join "").Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($originUrl)) {
-    throw "The Git remote named 'origin' is missing. It should point to https://github.com/Dijo-404/Proj_Setu.git."
+    throw "The Git remote named 'origin' is missing. It should point to https://github.com/Setuora/Setuora-Local.git."
 }
-if ($originUrl -notmatch "(?i)github\.com[:/]Dijo-404/Proj_Setu(?:\.git)?/?$") {
-    throw "The Git remote named 'origin' points to '$originUrl', not https://github.com/Dijo-404/Proj_Setu.git."
+$legacyOriginPattern = "(?i)^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)Dijo-404/Proj_Setu(?:\.git)?/?$"
+if ($originUrl -match $legacyOriginPattern) {
+    Write-Host "Migrating the retired Setuora origin to https://github.com/Setuora/Setuora-Local.git..." -ForegroundColor Cyan
+    & git remote set-url origin https://github.com/Setuora/Setuora-Local.git
+    if ($LASTEXITCODE -ne 0) {
+        throw "The retired Setuora origin could not be migrated. The installation was left unchanged."
+    }
+    $originUrl = "https://github.com/Setuora/Setuora-Local.git"
+}
+if ($originUrl -notmatch "(?i)^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)Setuora/Setuora-Local(?:\.git)?/?$") {
+    throw "The Git remote named 'origin' points to '$originUrl', not https://github.com/Setuora/Setuora-Local.git."
 }
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
