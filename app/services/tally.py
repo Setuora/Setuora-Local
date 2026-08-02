@@ -428,10 +428,19 @@ def _sync_batch_locked(db: Session, batch: Batch) -> None:
         return
     batch.sync_remote_id = tally_remote_id(batch, settings)
     try:
-        xml = batch.sync_request_xml or build_voucher_xml(batch, settings)
+        # A confirmed Tally rejection is safe to rebuild after the user fixes
+        # masters/settings or Setuora's XML format changes. Pending and stale
+        # SYNCING attempts keep their frozen payload because Tally may already
+        # have accepted the request before the connection/process was lost.
+        xml = (
+            build_voucher_xml(batch, settings)
+            if batch.status == BatchStatus.FAILED.value
+            else batch.sync_request_xml or build_voucher_xml(batch, settings)
+        )
     except TallySyncError as exc:
         batch.status = BatchStatus.PENDING_SYNC.value
         batch.last_error = str(exc)
+        batch.last_retry_at = now
         db.add(SyncAttempt(batch_id=batch.id, status=BatchStatus.PENDING_SYNC.value, error=batch.last_error))
         db.commit()
         return
@@ -439,6 +448,7 @@ def _sync_batch_locked(db: Session, batch: Batch) -> None:
         batch.status = BatchStatus.PENDING_SYNC.value
         batch.sync_request_xml = xml
         batch.last_error = "Tally sync is disabled in settings"
+        batch.last_retry_at = now
         db.add(SyncAttempt(batch_id=batch.id, status=BatchStatus.PENDING_SYNC.value, request_xml=xml, error=batch.last_error))
         db.commit()
         return
@@ -480,6 +490,7 @@ def _sync_batch_locked(db: Session, batch: Batch) -> None:
     except TallySyncError as exc:
         batch.status = BatchStatus.PENDING_SYNC.value if exc.retryable else BatchStatus.FAILED.value
         batch.last_error = str(exc)
+        batch.last_retry_at = now
         batch.sync_started_at = None
         attempt.status = batch.status
         attempt.request_xml = exc.request_xml or xml

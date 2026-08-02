@@ -222,7 +222,7 @@ def test_purchase_requires_shelf_qr_at_interval_and_before_submit():
         assert all(item.shelf_location_id == location_id for item in items)
         assert all(item.shelf_verified_at is not None for item in items)
         assert all(serial.location_id == location_id for serial in saved_serials)
-        assert saved_batch.status == BatchStatus.PENDING_SYNC.value
+        assert saved_batch.status == BatchStatus.SUBMITTED.value
     engine.dispose()
 
 

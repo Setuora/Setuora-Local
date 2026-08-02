@@ -106,7 +106,7 @@ def test_tally_xml_requires_party_on_the_batch(db_session):
         (BatchType.SALE, "sales", SerialStatus.IN_STOCK),
     ],
 )
-def test_submitting_purchase_or_sale_automatically_starts_tally_sync(
+def test_submitting_purchase_or_sale_queues_tally_sync(
     monkeypatch,
     db_session,
     batch_type,
@@ -140,11 +140,11 @@ def test_submitting_purchase_or_sale_automatically_starts_tally_sync(
     if batch_type == BatchType.PURCHASE:
         verify_pending_items_on_shelf(db_session, batch=batch, location=location, user=user)
 
-    synced_batch_ids: list[int] = []
+    queued_batch_ids: list[int] = []
     monkeypatch.setattr(
         batches_router,
-        "sync_batch",
-        lambda _db, submitted_batch: synced_batch_ids.append(submitted_batch.id),
+        "queue_batch_for_sync",
+        lambda _db, submitted_batch: queued_batch_ids.append(submitted_batch.id),
     )
 
     response = batches_router.submit_batch(
@@ -154,7 +154,7 @@ def test_submitting_purchase_or_sale_automatically_starts_tally_sync(
     )
 
     assert response.status_code == 303
-    assert synced_batch_ids == [batch.id]
+    assert queued_batch_ids == [batch.id]
     assert batch.status == BatchStatus.SUBMITTED.value
 
 
