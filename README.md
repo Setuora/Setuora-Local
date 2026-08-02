@@ -222,14 +222,14 @@ Do this in order:
 
 1. Open `Settings`.
 2. Add or activate a company profile.
-3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, and round-off ledger.
-4. Leave `Enable Tally sync` off during setup. Other fields auto-save, but sync only changes when `Save settings` is clicked.
+3. Enter the exact Tally company, host, port, company stock location/Godown, voucher type names, ledger names, GST ledgers, and round-off ledger. `Main Location` is the default; Tally Check can load other franchise/Godown names from Tally.
+4. Leave both purchase and sales Tally sync off during setup. Other fields auto-save, but the sync choices change only when `Save settings` is clicked.
 5. Open `Products`.
 6. Create products using exact Tally stock item names, HSN, GST rate, unit, default rate, and sales discount if applicable.
 7. Generate serial QR labels from `Products`, or use `Barcode Assignment` for existing physical stock.
 8. Open `Tally Check`.
 9. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
-10. Enable Tally sync only after Tally Check has no missing or unchecked items and a test XML is validated in Tally.
+10. Enable purchase sync, sales sync, or both only after Tally Check has no missing or unchecked items and the corresponding test XML is validated in Tally.
 
 When switching the active company profile, Setuora disables Tally sync again so the new company's masters can be checked before posting.
 

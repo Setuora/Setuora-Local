@@ -4,13 +4,14 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Company, Setting
+from app.models import BatchType, Company, Setting
 
 
 COMPANY_SETTING_KEYS = [
     "company_name",
     "tally_host",
     "tally_port",
+    "tally_stock_location",
     "sales_voucher_type",
     "purchase_voucher_type",
     "sales_ledger_name",
@@ -25,8 +26,11 @@ COMPANY_SETTING_KEYS = [
 DEFAULT_SETTINGS = {
     "company_name": "",
     "tally_enabled": "false",
+    "tally_purchase_enabled": "false",
+    "tally_sales_enabled": "false",
     "tally_host": "127.0.0.1",
     "tally_port": "9000",
+    "tally_stock_location": "Main Location",
     "sales_voucher_type": "",
     "purchase_voucher_type": "",
     "sales_ledger_name": "",
@@ -46,6 +50,7 @@ LEGACY_PLACEHOLDER_SETTINGS = {
     "company_name": "SWARNAGOWRI",
     "tally_host": "127.0.0.1",
     "tally_port": "9000",
+    "tally_stock_location": "Main Location",
     "sales_voucher_type": "Sales",
     "purchase_voucher_type": "Purchase",
     "sales_ledger_name": "Sales @ 5%",
@@ -97,8 +102,11 @@ def parse_sales_gst_ledger_mappings(raw: str | None) -> dict[str, dict[str, str]
 
 
 def ensure_default_settings(db: Session) -> None:
+    legacy_tally_enabled = db.get(Setting, "tally_enabled")
     for key, value in DEFAULT_SETTINGS.items():
         if not db.get(Setting, key):
+            if key in {"tally_purchase_enabled", "tally_sales_enabled"} and legacy_tally_enabled:
+                value = legacy_tally_enabled.value
             db.add(Setting(key=key, value=value))
     db.commit()
 
@@ -118,7 +126,24 @@ def get_all_settings(db: Session) -> dict[str, str]:
 
 
 def _apply_settings(db: Session, values: dict[str, str]) -> None:
-    for key, value in values.items():
+    normalized = dict(values)
+    granular_keys = {"tally_purchase_enabled", "tally_sales_enabled"}
+    if "tally_enabled" in normalized and not (granular_keys & normalized.keys()):
+        # Keep callers using the former combined flag compatible.
+        normalized["tally_purchase_enabled"] = normalized["tally_enabled"]
+        normalized["tally_sales_enabled"] = normalized["tally_enabled"]
+    if granular_keys & normalized.keys():
+        purchase_enabled = normalized.get(
+            "tally_purchase_enabled", get_setting(db, "tally_purchase_enabled", "false")
+        )
+        sales_enabled = normalized.get(
+            "tally_sales_enabled", get_setting(db, "tally_sales_enabled", "false")
+        )
+        normalized["tally_enabled"] = (
+            "true" if "true" in {purchase_enabled.lower(), sales_enabled.lower()} else "false"
+        )
+
+    for key, value in normalized.items():
         row = db.get(Setting, key)
         if row:
             row.value = value
@@ -137,7 +162,7 @@ def update_settings(db: Session, values: dict[str, str], *, commit: bool = True)
 
 
 def clear_legacy_placeholder_settings(db: Session) -> None:
-    if get_setting(db, "tally_enabled", "false").lower() == "true":
+    if is_tally_enabled(db):
         return
     if any(get_setting(db, key, "") != value for key, value in LEGACY_PLACEHOLDER_SETTINGS.items()):
         return
@@ -153,13 +178,39 @@ def clear_legacy_placeholder_settings(db: Session) -> None:
             config = json.loads(company.config)
         except (TypeError, ValueError):
             config = {}
-        if all(config.get(key) == LEGACY_PLACEHOLDER_SETTINGS[key] for key in COMPANY_SETTING_KEYS):
+        if all(
+            config.get(key, DEFAULT_SETTINGS[key]) == LEGACY_PLACEHOLDER_SETTINGS[key]
+            for key in COMPANY_SETTING_KEYS
+        ):
             db.delete(company)
     db.commit()
 
 
 def is_tally_enabled(db: Session) -> bool:
+    return bool(enabled_tally_sync_batch_types(db))
+
+
+def _tally_sync_option_enabled(db: Session, key: str) -> bool:
+    option = db.get(Setting, key)
+    if option is not None:
+        return option.value.lower() == "true"
+    # Databases are migrated during bootstrap, but retain this fallback for
+    # sessions opened against a pre-migration database.
     return get_setting(db, "tally_enabled", "false").lower() == "true"
+
+
+def enabled_tally_sync_batch_types(db: Session) -> set[str]:
+    enabled: set[str] = set()
+    if _tally_sync_option_enabled(db, "tally_purchase_enabled"):
+        enabled.update({BatchType.PURCHASE.value, BatchType.RECEIVE.value})
+    if _tally_sync_option_enabled(db, "tally_sales_enabled"):
+        enabled.update({BatchType.SALE.value, BatchType.SALES_RETURN.value})
+    return enabled
+
+
+def is_tally_sync_enabled_for_batch(db: Session, batch_type: BatchType | str) -> bool:
+    value = batch_type.value if isinstance(batch_type, BatchType) else str(batch_type)
+    return value in enabled_tally_sync_batch_types(db)
 
 
 def current_company_config(db: Session) -> dict[str, str]:
@@ -179,10 +230,18 @@ def company_config(company: Company) -> dict[str, str]:
         stored = json.loads(company.config)
     except (TypeError, ValueError):
         stored = {}
-    return {
+    config = {
         key: str(stored.get(key, DEFAULT_SETTINGS[key]) or "")
         for key in COMPANY_SETTING_KEYS
     }
+    config["tally_stock_location"] = config["tally_stock_location"] or "Main Location"
+    return config
+
+
+def _clean_company_config(config: dict[str, str]) -> dict[str, str]:
+    clean = {key: (config.get(key, "") or "").strip() for key in COMPANY_SETTING_KEYS}
+    clean["tally_stock_location"] = clean["tally_stock_location"] or "Main Location"
+    return clean
 
 
 def ensure_company_records(db: Session) -> None:
@@ -216,7 +275,7 @@ def validate_company_fields(config: dict[str, str]) -> str | None:
 
 
 def add_company(db: Session, name: str, config: dict[str, str], *, commit: bool = True) -> Company:
-    clean = {key: (config.get(key, "") or "").strip() for key in COMPANY_SETTING_KEYS}
+    clean = _clean_company_config(config)
     label = (name or clean["company_name"]).strip()
     if not label:
         return _raise("A company label is required.")
@@ -246,7 +305,7 @@ def update_company(db: Session, company_id: int, name: str, config: dict[str, st
     company = db.get(Company, company_id)
     if not company:
         return _raise("Company not found.")
-    clean = {key: (config.get(key, "") or "").strip() for key in COMPANY_SETTING_KEYS}
+    clean = _clean_company_config(config)
     label = (name or clean["company_name"]).strip()
     if not label:
         return _raise("A company label is required.")
@@ -313,7 +372,7 @@ def save_active_company_config(db: Session, config: dict[str, str], *, commit: b
     company = get_active_company(db)
     if not company:
         return
-    clean = {key: (config.get(key, "") or "").strip() for key in COMPANY_SETTING_KEYS}
+    clean = _clean_company_config(config)
     company.config = json.dumps(clean)
     if commit:
         try:

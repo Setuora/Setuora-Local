@@ -35,17 +35,17 @@ unrestricted.
 
 1. Open `Settings`.
 2. Add or activate a company profile.
-3. Enter exact Tally names for company, voucher types, ledgers, GST ledgers, and round-off ledger.
-4. Keep `Enable Tally sync` off until setup is validated.
+3. Enter exact Tally names for company, company stock location/Godown, voucher types, ledgers, GST ledgers, and round-off ledger. Company stock defaults to `Main Location`.
+4. Keep both purchase and sales Tally sync off until setup is validated.
 5. Open `Products` and create product masters with exact Tally stock item names.
 6. Open `Tally Check`. Click a company name to edit its Tally settings in the
-   popup. Click `Load from Tally` to select a loaded company, choose exact ledger
+   popup. Click `Load from Tally` to select a loaded company, choose its stock location or franchise, choose exact ledger
    names in the settings fields, and review the Sales Book for a selected date
    range. For the active company, use the same popup to test the gateway and
    confirm each required master only after comparing it with Tally.
 7. Create named users from `Users`, then use `Tally access` to assign any required company, ledger, and Tally-user restrictions.
 
-Settings fields auto-save while editing. The sync checkbox is saved only by the `Save settings` button and is blocked until Tally Check is complete.
+Settings fields auto-save while editing. The purchase and sales sync checkboxes are saved only by the `Save settings` button and are blocked until Tally Check is complete.
 
 ## Products and Labels
 

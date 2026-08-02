@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import ChangeAudit, Company, User
+from app.models import BatchType, ChangeAudit, Company, Setting, User
 from app.routers.settings import autosave_settings, validate_settings
 from app.security import create_session_token
 from app.services.settings import (
@@ -21,6 +21,7 @@ from app.services.settings import (
     company_config,
     ensure_company_records,
     ensure_default_settings,
+    enabled_tally_sync_batch_types,
     get_active_company,
     get_all_settings,
     parse_sales_gst_ledger_mappings,
@@ -62,6 +63,42 @@ def _valid_request(db):
 def test_autosave_endpoint_cannot_change_tally_enabled():
     params = inspect.signature(autosave_settings).parameters
     assert "tally_enabled" not in params
+    assert "tally_purchase_enabled" not in params
+    assert "tally_sales_enabled" not in params
+
+
+def test_existing_combined_sync_setting_migrates_to_both_separate_options(db_session):
+    db_session.add(Setting(key="tally_enabled", value="true"))
+    db_session.commit()
+
+    ensure_default_settings(db_session)
+
+    settings = get_all_settings(db_session)
+    assert settings["tally_purchase_enabled"] == "true"
+    assert settings["tally_sales_enabled"] == "true"
+
+
+def test_purchase_and_sales_sync_options_enable_their_own_batch_types(db_session):
+    ensure_default_settings(db_session)
+    update_settings(
+        db_session,
+        {"tally_purchase_enabled": "true", "tally_sales_enabled": "false"},
+    )
+
+    assert enabled_tally_sync_batch_types(db_session) == {
+        BatchType.PURCHASE.value,
+        BatchType.RECEIVE.value,
+    }
+    assert get_all_settings(db_session)["tally_enabled"] == "true"
+
+    update_settings(
+        db_session,
+        {"tally_purchase_enabled": "false", "tally_sales_enabled": "true"},
+    )
+    assert enabled_tally_sync_batch_types(db_session) == {
+        BatchType.SALE.value,
+        BatchType.SALES_RETURN.value,
+    }
 
 
 def test_autosave_persists_fields_and_mirrors_active_company(db_session):
@@ -168,6 +205,47 @@ def test_settings_routes_preserve_removed_fields_when_omitted():
             "sgst_ledger_name",
         ):
             assert saved[key] == VALID_SETTINGS[key]
+    engine.dispose()
+
+
+def test_settings_saves_purchase_and_sales_sync_separately(monkeypatch):
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        db.add(User(id=1, username="admin", password_hash="x", role="admin", active=True))
+        _seed(db)
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    monkeypatch.setattr("app.routers.settings.live_sync_readiness", lambda _db: (True, {"missing": 0, "unchecked": 0}))
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
+        with Session() as db:
+            form = _valid_request(db)
+        form["tally_purchase_enabled"] = "true"
+        response = client.post(
+            "/settings",
+            data=form,
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+        page = client.get("/settings", cookies={SESSION_COOKIE: create_session_token(1)})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 303
+    assert 'name="tally_purchase_enabled"' in page.text
+    assert 'name="tally_sales_enabled"' in page.text
+    with Session() as db:
+        settings = get_all_settings(db)
+        assert settings["tally_purchase_enabled"] == "true"
+        assert settings["tally_sales_enabled"] == "false"
     engine.dispose()
 
 

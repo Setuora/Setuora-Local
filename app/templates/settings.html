@@ -74,6 +74,7 @@
       <label>Tally host<input name="tally_host" value="{{ settings.tally_host }}" required></label>
       <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ settings.tally_port }}" required></label>
     </div>
+    <label>Company stock location<input name="tally_stock_location" value="Main Location" required></label>
     {{ sales_ledger_editor() }}
     <label>Round off ledger<input name="round_off_ledger_name" required></label>
     <div><button class="button primary" type="submit">Add company</button></div>
@@ -93,14 +94,19 @@
     <form method="post" action="/settings" class="stack" data-autosave="/settings/autosave">
       <label>Company name<input name="company_name" value="{{ settings.company_name }}" required></label>
       <label class="checkline">
-        <input type="checkbox" name="tally_enabled" value="true" data-no-autosave {{ 'checked' if settings.tally_enabled == 'true' else '' }}>
-        Automatically sync completed purchases and sales with Tally
-        <small class="muted" style="display:inline">- saved only with the button below; pending syncs retry in the background</small>
+        <input type="checkbox" name="tally_purchase_enabled" value="true" data-no-autosave {{ 'checked' if settings.tally_purchase_enabled == 'true' else '' }}>
+        Automatically sync completed purchases with Tally
       </label>
+      <label class="checkline">
+        <input type="checkbox" name="tally_sales_enabled" value="true" data-no-autosave {{ 'checked' if settings.tally_sales_enabled == 'true' else '' }}>
+        Automatically sync completed sales with Tally
+      </label>
+      <small class="muted">Sync choices are saved only with the button below; enabled pending syncs retry in the background.</small>
       <div class="two-col">
         <label>Tally host<input name="tally_host" value="{{ settings.tally_host }}" required></label>
         <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ settings.tally_port }}" required></label>
       </div>
+      <label>Company stock location<input name="tally_stock_location" value="{{ settings.tally_stock_location or 'Main Location' }}" required></label>
       <input type="hidden" name="sales_voucher_type" value="{{ settings.sales_voucher_type }}">
       <input type="hidden" name="purchase_voucher_type" value="{{ settings.purchase_voucher_type }}">
       <input type="hidden" name="sales_ledger_name" value="{{ settings.sales_ledger_name }}">

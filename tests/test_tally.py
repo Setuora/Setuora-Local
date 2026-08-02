@@ -25,6 +25,7 @@ from app.services.inventory import apply_batch_statuses, add_serial_to_batch, cr
 from app.services.shelf_verification import verify_pending_items_on_shelf
 from app.services.settings import update_settings
 from app.services.tally import TallyResult, TallySyncError, build_voucher_xml, post_to_tally, sync_batch
+from app.services.tally_excel import _accounting_voucher_rows
 from app.templates import templates
 
 
@@ -175,14 +176,86 @@ def test_sale_batch_xml_groups_serials_by_product(db_session):
     for serial in serials:
         add_serial_to_batch(db_session, batch, user, serial.serial_number)
     apply_batch_statuses(db_session, batch, user)
-    xml = build_voucher_xml(batch, VALID_SETTINGS)
+    settings = {**VALID_SETTINGS, "tally_stock_location": "Franchise Mysuru"}
+    xml = build_voucher_xml(batch, settings)
     assert xml.count("<ALLINVENTORYENTRIES.LIST>") == 1
     assert "2 Pcs" in xml
     assert "Sg Biriyani Masala 100grm" in xml
     voucher = ET.fromstring(xml).find(".//VOUCHER")
     assert voucher is not None
     assert voucher.attrib["REMOTEID"]
-    assert build_voucher_xml(batch, VALID_SETTINGS) == xml
+    assert voucher.findtext("ALLINVENTORYENTRIES.LIST/BATCHALLOCATIONS.LIST/GODOWNNAME") == "Franchise Mysuru"
+    assert build_voucher_xml(batch, settings) == xml
+
+
+def test_sale_xml_matches_excel_posting_data_and_field_order(db_session):
+    user = User(username="sales-ordered-xml", password_hash="x", role="sales")
+    product = Product(
+        product_code="XML-ORDER",
+        product_name="Ordered XML Product",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=101,
+        tally_stock_item_name="Ordered XML Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Ordered Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+
+    voucher = ET.fromstring(build_voucher_xml(batch, VALID_SETTINGS)).find(".//VOUCHER")
+    assert voucher is not None
+    headers, *excel_rows = _accounting_voucher_rows(batch, VALID_SETTINGS)
+    ledger_index = headers.index("Ledger Name")
+    amount_index = headers.index("Ledger Amount")
+    dr_cr_index = headers.index("Ledger Amount Dr/Cr")
+    voucher_number_index = headers.index("Voucher Number")
+    excel_postings = [
+        (
+            str(row[ledger_index]),
+            Decimal(str(row[amount_index])) * (1 if row[dr_cr_index] == "Cr" else -1),
+        )
+        for row in excel_rows
+    ]
+
+    xml_postings: list[tuple[str, Decimal]] = []
+    posting_tags: list[str] = []
+    for child in voucher:
+        if child.tag == "LEDGERENTRIES.LIST":
+            posting_tags.append(child.tag)
+            xml_postings.append((child.findtext("LEDGERNAME") or "", Decimal(child.findtext("AMOUNT") or "0")))
+        elif child.tag == "ALLINVENTORYENTRIES.LIST":
+            posting_tags.append(child.tag)
+            allocation = child.find("ACCOUNTINGALLOCATIONS.LIST")
+            assert allocation is not None
+            xml_postings.append(
+                (
+                    allocation.findtext("LEDGERNAME") or "",
+                    Decimal(allocation.findtext("AMOUNT") or "0"),
+                )
+            )
+
+    assert posting_tags == [
+        "LEDGERENTRIES.LIST",
+        "ALLINVENTORYENTRIES.LIST",
+        "LEDGERENTRIES.LIST",
+        "LEDGERENTRIES.LIST",
+        "LEDGERENTRIES.LIST",
+    ]
+    assert xml_postings == excel_postings
+    assert voucher.findtext("VOUCHERNUMBER") == str(excel_rows[0][voucher_number_index])
+    assert voucher.findtext("PERSISTEDVIEW") == "Invoice Voucher View"
+    assert voucher.findtext("ISINVOICE") == "Yes"
+    inventory = voucher.find("ALLINVENTORYENTRIES.LIST")
+    assert inventory is not None
+    assert inventory.findtext("BATCHALLOCATIONS.LIST/GODOWNNAME") == "Main Location"
+    assert inventory.findtext("BATCHALLOCATIONS.LIST/DESTINATIONGODOWNNAME") == "Main Location"
+    party_entry = voucher.find("LEDGERENTRIES.LIST")
+    assert party_entry is not None
+    assert party_entry.findtext("ISPARTYLEDGER") == "Yes"
 
 
 def test_sale_batch_xml_includes_sales_discount(db_session):
@@ -617,7 +690,14 @@ def test_purchase_and_sale_batches_sync_to_tally(monkeypatch, db_session):
     )
     db_session.add_all([user, purchase_product, sale_product, location])
     db_session.commit()
-    update_settings(db_session, {**VALID_SETTINGS, "tally_enabled": "true"})
+    update_settings(
+        db_session,
+        {
+            **VALID_SETTINGS,
+            "tally_purchase_enabled": "true",
+            "tally_sales_enabled": "false",
+        },
+    )
     purchase_serial = generate_serials(db_session, purchase_product, 1)[0]
     sale_serial = generate_serials(db_session, sale_product, 1, initial_status=SerialStatus.IN_STOCK)[0]
     purchase_batch = create_batch(db_session, user, BatchType.PURCHASE, "Supplier", "")
@@ -640,6 +720,12 @@ def test_purchase_and_sale_batches_sync_to_tally(monkeypatch, db_session):
     sync_batch(db_session, sale_batch)
 
     assert purchase_batch.status == BatchStatus.SYNCED.value
+    assert sale_batch.status == BatchStatus.PENDING_SYNC.value
+    assert len(posted_xml) == 1
+
+    update_settings(db_session, {"tally_sales_enabled": "true"})
+    sync_batch(db_session, sale_batch)
+
     assert sale_batch.status == BatchStatus.SYNCED.value
     assert any("<VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>" in xml for xml in posted_xml)
     assert any("<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>" in xml for xml in posted_xml)

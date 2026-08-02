@@ -46,7 +46,7 @@ def test_sale_new_batch_has_fallback_state_and_scan_driven_products():
     assert 'name="sale_product_id"' not in html
     assert 'name="sale_quantity"' not in html
     assert 'name="party_gst_registration_type"' in html
-    assert '<option value="Unregistered/Consumer" selected>Unregistered/Consumer</option>' in html
+    assert '<option value="Unregistered/Consumer" selected>Unregistered Consumer</option>' in html
     assert 'name="party_gst_name"' in html
     assert 'data-gst-number-field hidden' in html
     assert 'name="party_gstin"' in html

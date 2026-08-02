@@ -66,6 +66,7 @@
     <div class="product-summary-grid company-summary-grid">
       <div><span>Tally company</span><strong>{{ row.config.company_name or '-' }}</strong></div>
       <div><span>Connection</span><strong>{{ row.config.tally_host }}:{{ row.config.tally_port }}</strong></div>
+      <div><span>Stock location</span><strong>{{ row.config.tally_stock_location or 'Main Location' }}</strong></div>
       <div><span>Round-off ledger</span><strong>{{ row.config.round_off_ledger_name or '-' }}</strong></div>
     </div>
 
@@ -88,6 +89,14 @@
         <label>Tally company name<input name="company_name" value="{{ row.config.company_name }}" list="tally-companies-{{ row.company.id }}" required></label>
         <label>Tally host<input name="tally_host" value="{{ row.config.tally_host }}" required></label>
         <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ row.config.tally_port }}" required></label>
+        <label>Company stock location
+          <select name="tally_stock_location" data-company-stock-location required>
+            <option value="{{ row.config.tally_stock_location or 'Main Location' }}">
+              {{ row.config.tally_stock_location or 'Main Location' }}
+            </option>
+          </select>
+          <small class="muted">Load Tally data to choose Main Location or another franchise/Godown.</small>
+        </label>
         <input type="hidden" name="sales_voucher_type" value="{{ row.config.sales_voucher_type }}">
         <input type="hidden" name="purchase_voucher_type" value="{{ row.config.purchase_voucher_type }}">
         <input type="hidden" name="sales_ledger_name" value="{{ row.config.sales_ledger_name }}">
@@ -114,7 +123,7 @@
       <div class="product-modal-section__head tally-live-head">
         <div>
           <h3>Live Tally data</h3>
-          <p>Load companies and ledger names from Tally, then review the selected company's sales book.</p>
+          <p>Load companies, stock locations/franchises, and ledger names from Tally, then review the selected company's sales book.</p>
         </div>
         <button class="button" type="button" data-tally-live-connect>Load from Tally</button>
       </div>
@@ -148,6 +157,21 @@
       </p>
 
       <div class="tally-live-results" data-tally-live-results hidden>
+        <section class="tally-live-card">
+          <div class="section-title tally-live-card__title">
+            <h4>Stock locations / franchises</h4>
+            <span data-tally-live-location-count>0 locations</span>
+          </div>
+          <div class="table-scroll tally-live-table-scroll">
+            <table>
+              <thead><tr><th>Location</th><th>Parent</th></tr></thead>
+              <tbody data-tally-live-locations>
+                <tr><td colspan="2" class="empty">Load a Tally company to see stock locations.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section class="tally-live-card">
           <div class="section-title tally-live-card__title">
             <h4>Ledger names</h4>
@@ -436,11 +460,17 @@
       const toInput = browser.querySelector("[data-tally-live-to]");
       const status = browser.querySelector("[data-tally-live-status]");
       const results = browser.querySelector("[data-tally-live-results]");
+      const companyDialog = browser.closest("dialog");
+      const stockLocationSelect = companyDialog
+        ? companyDialog.querySelector("[data-company-stock-location]")
+        : null;
       const companyOptions = browser.querySelector("[data-tally-company-options]");
       const ledgerOptions = browser.querySelector("[data-tally-ledger-options]");
       const ledgerBody = browser.querySelector("[data-tally-live-ledgers]");
+      const locationBody = browser.querySelector("[data-tally-live-locations]");
       const salesBody = browser.querySelector("[data-tally-live-sales]");
       const ledgerCount = browser.querySelector("[data-tally-live-ledger-count]");
+      const locationCount = browser.querySelector("[data-tally-live-location-count]");
       const salesCount = browser.querySelector("[data-tally-live-sales-count]");
       let initialized = false;
 
@@ -476,6 +506,41 @@
         ledgerCount.textContent = payload.count + " ledger" + (payload.count === 1 ? "" : "s");
       }
 
+      function renderLocations(payload) {
+        locationBody.replaceChildren();
+        const selectedLocation = stockLocationSelect ? stockLocationSelect.value : "";
+        if (stockLocationSelect) stockLocationSelect.replaceChildren();
+        payload.locations.forEach((location) => {
+          if (stockLocationSelect) {
+            const option = document.createElement("option");
+            option.value = location.name;
+            option.textContent = location.parent
+              ? location.name + " — " + location.parent
+              : location.name;
+            stockLocationSelect.appendChild(option);
+          }
+          const row = document.createElement("tr");
+          row.append(cell(location.name), cell(location.parent));
+          locationBody.appendChild(row);
+        });
+        if (stockLocationSelect && selectedLocation) {
+          const available = Array.from(stockLocationSelect.options).some(
+            (option) => option.value === selectedLocation
+          );
+          if (!available) {
+            const option = document.createElement("option");
+            option.value = selectedLocation;
+            option.textContent = selectedLocation + " (saved)";
+            stockLocationSelect.prepend(option);
+          }
+          stockLocationSelect.value = selectedLocation;
+        }
+        if (!payload.locations.length) {
+          tableMessage(locationBody, 2, "No stock locations were returned by Tally.");
+        }
+        locationCount.textContent = payload.count + " location" + (payload.count === 1 ? "" : "s");
+      }
+
       function renderSales(payload) {
         salesBody.replaceChildren();
         payload.vouchers.forEach((voucher) => {
@@ -503,26 +568,34 @@
         setStatus(
           preserveExisting
             ? "Saved data loaded. Checking Tally for new ledgers and vouchers..."
-            : "Loading ledgers and sales book from " + company + "...",
+            : "Loading stock locations, ledgers, and sales book from " + company + "...",
           false
         );
         if (!preserveExisting) {
+          tableMessage(locationBody, 2, "Loading stock locations...");
           tableMessage(ledgerBody, 3, "Loading ledgers...");
           tableMessage(salesBody, 4, "Loading sales book...");
         }
         try {
           const ledgerUrl = "/tally-check/companies/" + companyId + "/live/ledgers?" + query({ tally_company: company });
+          const locationUrl = "/tally-check/companies/" + companyId + "/live/stock-locations?" + query({ tally_company: company });
           const salesUrl = "/tally-check/companies/" + companyId + "/live/sales-book?" + query({
             tally_company: company,
             from_date: fromInput.value,
             to_date: toInput.value
           });
-          const payloads = await Promise.all([fetchPayload(ledgerUrl), fetchPayload(salesUrl)]);
+          const payloads = await Promise.all([
+            fetchPayload(ledgerUrl),
+            fetchPayload(locationUrl),
+            fetchPayload(salesUrl)
+          ]);
           renderLedgers(payloads[0]);
-          renderSales(payloads[1]);
+          renderLocations(payloads[1]);
+          renderSales(payloads[2]);
           setStatus("Tally data refreshed and saved for " + company + ".", false);
         } catch (error) {
           if (!preserveExisting) {
+            tableMessage(locationBody, 2, "Could not load stock locations.");
             tableMessage(ledgerBody, 3, "Could not load ledgers.");
             tableMessage(salesBody, 4, "Could not load the sales book.");
           }

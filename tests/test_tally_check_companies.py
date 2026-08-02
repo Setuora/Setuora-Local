@@ -14,13 +14,19 @@ from app.security import create_session_token
 from app.services.settings import add_company, get_all_settings
 from app.services.tally_access import replace_user_access
 from app.services.tally_cache import replace_cached_ledgers, replace_cached_sales_book
-from app.services.tally_masters import GatewayCheckResult, TallyLedger, TallySalesVoucher
+from app.services.tally_masters import (
+    GatewayCheckResult,
+    TallyLedger,
+    TallySalesVoucher,
+    TallyStockLocation,
+)
 
 
 COMPANY_CONFIG = {
     "company_name": "Original Tally Company",
     "tally_host": "127.0.0.1",
     "tally_port": "9000",
+    "tally_stock_location": "Main Location",
     "sales_voucher_type": "Sales",
     "purchase_voucher_type": "Purchase",
     "sales_ledger_name": "Sales Ledger",
@@ -87,6 +93,7 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                 **visible_config,
                 "name": "Edited Label",
                 "company_name": "Edited Tally Company",
+                "tally_stock_location": "Franchise Mysuru",
             },
         )
         with (
@@ -97,6 +104,13 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
             patch(
                 "app.routers.tally_check.fetch_tally_ledgers",
                 return_value=[TallyLedger("Customer A", "Sundry Debtors", "-500.00")],
+            ),
+            patch(
+                "app.routers.tally_check.fetch_tally_stock_locations",
+                return_value=[
+                    TallyStockLocation("Main Location"),
+                    TallyStockLocation("Franchise Mysuru", "Main Location"),
+                ],
             ),
             patch(
                 "app.routers.tally_check.fetch_tally_sales_book",
@@ -126,6 +140,11 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
             )
             live_ledgers = client.get(
                 f"/tally-check/companies/{company_id}/live/ledgers",
+                params={"tally_company": "Live Company"},
+                cookies=cookies,
+            )
+            live_locations = client.get(
+                f"/tally-check/companies/{company_id}/live/stock-locations",
                 params={"tally_company": "Live Company"},
                 cookies=cookies,
             )
@@ -173,6 +192,8 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert "Live Tally data" in page.text
     assert 'data-tally-live-company' in page.text
     assert 'data-tally-live-ledgers' in page.text
+    assert 'data-company-stock-location' in page.text
+    assert 'data-tally-live-locations' in page.text
     assert 'data-tally-live-sales' in page.text
     assert 'data-auto-refresh="true"' in page.text
     assert '"/cached?"' in page.text
@@ -180,10 +201,15 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert update.json()["ok"]
     assert saved_name == "Edited Label"
     assert saved_tally_name == "Edited Tally Company"
+    assert settings["tally_stock_location"] == "Franchise Mysuru"
     assert settings["sales_ledger_name"] == COMPANY_CONFIG["sales_ledger_name"]
     assert live_companies.status_code == 200
     assert live_companies.json()["companies"] == ["Live Company", "Other Company"]
     assert live_ledgers.json()["ledgers"][0]["name"] == "Customer A"
+    assert [row["name"] for row in live_locations.json()["locations"]] == [
+        "Main Location",
+        "Franchise Mysuru",
+    ]
     assert live_sales.json()["vouchers"][0]["voucher_number"] == "42"
     assert cached_data.status_code == 200
     assert cached_data.json()["ledger_count"] == 1

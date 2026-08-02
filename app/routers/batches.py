@@ -115,7 +115,13 @@ INDIAN_STATE_OPTIONS = (
 GST_REGISTRATION_OPTIONS = tuple(
     (
         registration_type.value,
-        "Registered" if registration_type == GstRegistrationType.REGULAR else registration_type.value,
+        (
+            "Registered"
+            if registration_type == GstRegistrationType.REGULAR
+            else "Unregistered Consumer"
+            if registration_type == GstRegistrationType.UNREGISTERED_CONSUMER
+            else registration_type.value
+        ),
     )
     for registration_type in GstRegistrationType
 )

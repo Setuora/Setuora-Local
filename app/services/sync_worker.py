@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
 from app.models import Batch, BatchItem, BatchStatus, Serial, utc_now
-from app.services.settings import get_all_settings, is_tally_enabled
+from app.services.settings import enabled_tally_sync_batch_types, get_all_settings
 from app.services.tally import SYNC_LEASE_MINUTES, TALLY_XML_SUPPORTED_BATCH_TYPES, sync_batch
 
 
@@ -21,7 +21,8 @@ logger = logging.getLogger("setuora")
 
 def retry_pending_batches(limit: int = 10) -> int:
     with SessionLocal() as db:
-        if not is_tally_enabled(db):
+        enabled_batch_types = enabled_tally_sync_batch_types(db)
+        if not enabled_batch_types:
             return 0
         batches = db.scalars(
             select(Batch)
@@ -33,7 +34,7 @@ def retry_pending_batches(limit: int = 10) -> int:
                         & (Batch.sync_started_at < utc_now() - timedelta(minutes=SYNC_LEASE_MINUTES))
                     ),
                 ),
-                Batch.batch_type.in_(TALLY_XML_SUPPORTED_BATCH_TYPES),
+                Batch.batch_type.in_(TALLY_XML_SUPPORTED_BATCH_TYPES & enabled_batch_types),
             )
             .order_by(Batch.last_retry_at.is_not(None), Batch.last_retry_at, Batch.created_at)
             .limit(limit)

@@ -125,9 +125,11 @@ async def save_access_overview(request: Request, db: Session = Depends(get_db)):
 def save_settings(
     request: Request,
     company_name: str = Form(...),
-    tally_enabled: str = Form("false"),
+    tally_purchase_enabled: str = Form("false"),
+    tally_sales_enabled: str = Form("false"),
     tally_host: str = Form(...),
     tally_port: str = Form(...),
+    tally_stock_location: str | None = Form(None),
     sales_voucher_type: str | None = Form(None),
     purchase_voucher_type: str | None = Form(None),
     sales_ledger_name: str | None = Form(None),
@@ -141,11 +143,20 @@ def save_settings(
 ):
     user = require_permission(request, db, "settings_edit")
     current_settings = get_all_settings(db)
+    purchase_sync = "true" if tally_purchase_enabled == "true" else "false"
+    sales_sync = "true" if tally_sales_enabled == "true" else "false"
     requested = {
         "company_name": company_name.strip(),
-        "tally_enabled": "true" if tally_enabled == "true" else "false",
+        "tally_enabled": "true" if "true" in {purchase_sync, sales_sync} else "false",
+        "tally_purchase_enabled": purchase_sync,
+        "tally_sales_enabled": sales_sync,
         "tally_host": tally_host.strip(),
         "tally_port": tally_port.strip(),
+        "tally_stock_location": (
+            current_settings["tally_stock_location"]
+            if tally_stock_location is None
+            else tally_stock_location.strip() or "Main Location"
+        ),
         "sales_voucher_type": current_settings["sales_voucher_type"] if sales_voucher_type is None else sales_voucher_type.strip(),
         "purchase_voucher_type": current_settings["purchase_voucher_type"] if purchase_voucher_type is None else purchase_voucher_type.strip(),
         "sales_ledger_name": current_settings["sales_ledger_name"] if sales_ledger_name is None else sales_ledger_name.strip(),
@@ -160,7 +171,8 @@ def save_settings(
     validation_error = validate_settings(requested)
     if validation_error:
         settings = {**current_settings, **requested}
-        settings["tally_enabled"] = current_settings.get("tally_enabled", "false")
+        for key in ("tally_enabled", "tally_purchase_enabled", "tally_sales_enabled"):
+            settings[key] = current_settings.get(key, "false")
         return render_settings(request, db, settings=settings, error=validation_error, status_code=400, open_settings=True)
 
     if requested["tally_enabled"] == "true":
@@ -174,7 +186,8 @@ def save_settings(
         if not ready:
             db.rollback()
             settings = {**current_settings, **requested}
-            settings["tally_enabled"] = current_settings.get("tally_enabled", "false")
+            for key in ("tally_enabled", "tally_purchase_enabled", "tally_sales_enabled"):
+                settings[key] = current_settings.get(key, "false")
             return render_settings(
                 request,
                 db,
@@ -209,6 +222,7 @@ def autosave_settings(
     company_name: str = Form(...),
     tally_host: str = Form(...),
     tally_port: str = Form(...),
+    tally_stock_location: str | None = Form(None),
     sales_voucher_type: str | None = Form(None),
     purchase_voucher_type: str | None = Form(None),
     sales_ledger_name: str | None = Form(None),
@@ -226,6 +240,11 @@ def autosave_settings(
         "company_name": company_name.strip(),
         "tally_host": tally_host.strip(),
         "tally_port": tally_port.strip(),
+        "tally_stock_location": (
+            before_settings["tally_stock_location"]
+            if tally_stock_location is None
+            else tally_stock_location.strip() or "Main Location"
+        ),
         "sales_voucher_type": before_settings["sales_voucher_type"] if sales_voucher_type is None else sales_voucher_type.strip(),
         "purchase_voucher_type": before_settings["purchase_voucher_type"] if purchase_voucher_type is None else purchase_voucher_type.strip(),
         "sales_ledger_name": before_settings["sales_ledger_name"] if sales_ledger_name is None else sales_ledger_name.strip(),
@@ -264,6 +283,7 @@ def create_company(
     company_name: str = Form(...),
     tally_host: str = Form(...),
     tally_port: str = Form(...),
+    tally_stock_location: str = Form("Main Location"),
     sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
     db: Session = Depends(get_db),
@@ -274,6 +294,7 @@ def create_company(
         "company_name": company_name,
         "tally_host": tally_host,
         "tally_port": tally_port,
+        "tally_stock_location": tally_stock_location.strip() or "Main Location",
         "sales_voucher_type": current_settings["sales_voucher_type"],
         "purchase_voucher_type": current_settings["purchase_voucher_type"],
         "sales_ledger_name": current_settings["sales_ledger_name"],

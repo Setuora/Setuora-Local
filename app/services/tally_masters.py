@@ -46,6 +46,12 @@ class TallyLedger:
 
 
 @dataclass(frozen=True)
+class TallyStockLocation:
+    name: str
+    parent: str = ""
+
+
+@dataclass(frozen=True)
 class TallySalesVoucher:
     date: str
     voucher_number: str
@@ -82,6 +88,13 @@ def collect_master_requirements(db: Session) -> list[MasterRequirement]:
     requirements: dict[tuple[str, str], MasterRequirement] = {}
 
     _add(requirements, "Company", settings["company_name"], "Settings", "Must be the open Tally company")
+    _add(
+        requirements,
+        "Godown",
+        settings["tally_stock_location"],
+        "Settings",
+        "Company stock location / franchise",
+    )
     _add(requirements, "Ledger", settings["round_off_ledger_name"], "Settings", "Round off posting ledger")
     mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
     for gst_rate, ledgers in mappings.items():
@@ -218,6 +231,16 @@ def build_ledger_list_xml(company_name: str) -> str:
         "Setuora Ledger List",
         "Ledger",
         ("Name", "Parent", "ClosingBalance"),
+        company_name=company_name.strip(),
+    )
+    return ET.tostring(envelope, encoding="unicode")
+
+
+def build_stock_location_list_xml(company_name: str) -> str:
+    envelope, _ = _build_collection_export(
+        "Setuora Stock Location List",
+        "Godown",
+        ("Name", "Parent"),
         company_name=company_name.strip(),
     )
     return ET.tostring(envelope, encoding="unicode")
@@ -386,6 +409,37 @@ def fetch_tally_ledgers(settings: dict[str, str], company_name: str) -> list[Tal
         )
         seen.add(name.casefold())
     return sorted(ledgers, key=lambda ledger: ledger.name.casefold())
+
+
+def fetch_tally_stock_locations(
+    settings: dict[str, str],
+    company_name: str,
+) -> list[TallyStockLocation]:
+    clean_company = company_name.strip()
+    if not clean_company:
+        raise TallyDataError("Choose a Tally company before loading stock locations.")
+    _, root = _post_read_request(
+        settings,
+        build_stock_location_list_xml(clean_company),
+    )
+    locations: list[TallyStockLocation] = []
+    seen: set[str] = set()
+    for node in root.iter():
+        if _local_tag(node) not in {"GODOWN", "LOCATION"}:
+            continue
+        name = _direct_text(node, "NAME") or (node.attrib.get("NAME") or "").strip()
+        if not name or name.casefold() in seen:
+            continue
+        locations.append(
+            TallyStockLocation(
+                name=name,
+                parent=_direct_text(node, "PARENT"),
+            )
+        )
+        seen.add(name.casefold())
+    if "main location" not in seen:
+        locations.append(TallyStockLocation("Main Location"))
+    return sorted(locations, key=lambda location: location.name.casefold())
 
 
 def _party_ledger(voucher: ET.Element) -> str:

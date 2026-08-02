@@ -38,6 +38,7 @@ from app.services.tally_masters import (
     fetch_tally_companies,
     fetch_tally_ledgers,
     fetch_tally_sales_book,
+    fetch_tally_stock_locations,
     readiness_counts,
     remove_confirmation,
     TallyDataError,
@@ -139,6 +140,7 @@ def save_company(
     company_name: str = Form(...),
     tally_host: str = Form(...),
     tally_port: str = Form(...),
+    tally_stock_location: str | None = Form(None),
     sales_voucher_type: str | None = Form(None),
     purchase_voucher_type: str | None = Form(None),
     sales_ledger_name: str | None = Form(None),
@@ -162,6 +164,11 @@ def save_company(
         "company_name": company_name,
         "tally_host": tally_host,
         "tally_port": tally_port,
+        "tally_stock_location": (
+            current_config.get("tally_stock_location", "Main Location")
+            if tally_stock_location is None
+            else tally_stock_location.strip() or "Main Location"
+        ),
         "sales_voucher_type": current_config.get("sales_voucher_type", "") if sales_voucher_type is None else sales_voucher_type,
         "purchase_voucher_type": current_config.get("purchase_voucher_type", "") if purchase_voucher_type is None else purchase_voucher_type,
         "sales_ledger_name": current_config.get("sales_ledger_name", "") if sales_ledger_name is None else sales_ledger_name,
@@ -294,6 +301,33 @@ def live_ledgers(
             "company": tally_company.strip(),
             "count": len(visible_ledgers),
             "ledgers": [asdict(ledger) for ledger in visible_ledgers],
+        }
+    )
+
+
+@router.get("/companies/{company_id}/live/stock-locations")
+def live_stock_locations(
+    request: Request,
+    company_id: int,
+    tally_company: str,
+    db: Session = Depends(get_db),
+):
+    user = require_permission(request, db, "tally_check_edit")
+    company, config = _scoped_live_company_config(db, user, company_id)
+    if not company or config is None:
+        return _live_error("Company profile not found or not assigned to your account.", 404)
+    if not can_access_tally_company(db, user, company, tally_company):
+        return _live_error("This Tally company is not assigned to your account.", 403)
+    try:
+        locations = fetch_tally_stock_locations(config, tally_company)
+    except TallyDataError as exc:
+        return _live_error(str(exc))
+    return JSONResponse(
+        {
+            "ok": True,
+            "company": tally_company.strip(),
+            "count": len(locations),
+            "locations": [asdict(location) for location in locations],
         }
     )
 
