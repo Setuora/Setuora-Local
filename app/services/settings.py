@@ -44,6 +44,8 @@ DEFAULT_SETTINGS = {
     "movement_dead_below_pct": "10",
     "movement_slow_below_pct": "40",
     "movement_medium_up_to_pct": "80",
+    # Internal durable state for the singleton Tally gateway-check queue item.
+    "_tally_gateway_check_state": "{}",
 }
 
 LEGACY_PLACEHOLDER_SETTINGS = {

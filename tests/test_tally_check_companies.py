@@ -12,10 +12,10 @@ from app.main import app
 from app.models import Company, TallyLedgerCache, User
 from app.security import create_session_token
 from app.services.settings import add_company, get_all_settings
+from app.services.sync_worker import GatewayCheckState
 from app.services.tally_access import replace_user_access
 from app.services.tally_cache import replace_cached_ledgers, replace_cached_sales_book
 from app.services.tally_masters import (
-    GatewayCheckResult,
     TallyLedger,
     TallySalesVoucher,
     TallyStockLocation,
@@ -125,11 +125,11 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                 ],
             ),
             patch(
-                "app.routers.tally_check.test_tally_gateway",
-                return_value=GatewayCheckResult(
-                    True,
-                    "Tally gateway responded",
-                    "<ENVELOPE><HEADER><STATUS>1</STATUS></HEADER></ENVELOPE>",
+                "app.routers.tally_check.queue_tally_gateway_check",
+                return_value=GatewayCheckState(
+                    "gateway-check-1",
+                    "queued",
+                    "Gateway test queued. Waiting for the Tally request worker.",
                 ),
             ),
         ):
@@ -215,9 +215,9 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert cached_data.json()["sales_count"] == 1
     assert cached_data.json()["ledgers"][0]["name"] == "Customer A"
     assert gateway_check.status_code == 200
-    assert 'class="alert success"' in gateway_check.text
-    assert "The configured Tally HTTP server is reachable and responding correctly." in gateway_check.text
-    assert "&lt;ENVELOPE&gt;" not in gateway_check.text
+    assert 'class="alert warn"' in gateway_check.text
+    assert "Gateway test queued" in gateway_check.text
+    assert 'data-tally-gateway-result' in gateway_check.text
 
 
 def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():

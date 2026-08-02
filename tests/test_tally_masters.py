@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.error import URLError
 from unittest.mock import patch
 
 from app.models import Product, User
@@ -16,6 +17,7 @@ from app.services.tally_masters import (
     fetch_tally_stock_locations,
     live_sync_readiness,
     readiness_counts,
+    TALLY_GATEWAY_TEST_TIMEOUT_SECONDS,
     test_tally_gateway as check_tally_gateway,
 )
 from app.services.settings import update_settings
@@ -263,11 +265,23 @@ def test_gateway_check_accepts_successful_tally_xml():
           <BODY><DATA><COLLECTION><COMPANY><NAME>Setuora Test Company</NAME></COMPANY></COLLECTION></DATA></BODY>
         </ENVELOPE>
     """
-    with patch("app.services.tally_masters.urlopen", return_value=_GatewayResponse(response)):
+    with patch("app.services.tally_masters.urlopen", return_value=_GatewayResponse(response)) as request:
         result = check_tally_gateway({"tally_host": "127.0.0.1", "tally_port": "9000"})
 
     assert result.ok
     assert result.message == "Tally gateway responded"
+    assert request.call_args.kwargs["timeout"] == TALLY_GATEWAY_TEST_TIMEOUT_SECONDS == 15
+
+
+def test_gateway_check_reports_wrapped_timeouts_consistently():
+    with patch(
+        "app.services.tally_masters.urlopen",
+        side_effect=URLError(TimeoutError("timed out")),
+    ):
+        result = check_tally_gateway({"tally_host": "127.0.0.1", "tally_port": "9000"})
+
+    assert not result.ok
+    assert result.message == "Tally gateway timed out after 15 seconds"
 
 
 def test_live_sync_readiness_requires_all_confirmations(db_session):

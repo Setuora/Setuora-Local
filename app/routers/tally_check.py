@@ -31,6 +31,7 @@ from app.services.tally_cache import (
     replace_cached_ledgers,
     replace_cached_sales_book,
 )
+from app.services.sync_worker import gateway_check_state, queue_tally_gateway_check
 from app.services.tally_masters import (
     collect_master_requirements,
     confirmation_lookup,
@@ -42,7 +43,6 @@ from app.services.tally_masters import (
     readiness_counts,
     remove_confirmation,
     TallyDataError,
-    test_tally_gateway,
 )
 from app.templates import templates
 
@@ -67,6 +67,8 @@ def render_check_page(
     open_company_id: int | None = None,
 ):
     user = require_permission(request, db, "tally_check_edit")
+    if result is None:
+        result = gateway_check_state(db)
     requirements = collect_master_requirements(db)
     confirmations = confirmation_lookup(db)
     companies = scoped_companies(db, user)
@@ -241,13 +243,32 @@ def unconfirm(
 @router.post("/test-gateway")
 def test_gateway(request: Request, db: Session = Depends(get_db)):
     require_permission(request, db, "tally_check_edit")
-    result = test_tally_gateway(get_all_settings(db))
+    result = queue_tally_gateway_check(db)
     active = get_active_company(db)
     return render_check_page(
         request,
         db,
         result,
         open_company_id=active.id if active else None,
+    )
+
+
+@router.get("/test-gateway/status")
+def test_gateway_status(request: Request, db: Session = Depends(get_db)):
+    require_permission(request, db, "tally_check_edit")
+    result = gateway_check_state(db)
+    if result is None:
+        return JSONResponse({"ok": True, "status": "idle", "pending": False})
+    return JSONResponse(
+        {
+            "ok": True,
+            "request_id": result.request_id,
+            "status": result.status,
+            "pending": result.pending,
+            "gateway_ok": result.ok,
+            "message": result.message,
+            "response_excerpt": result.response_excerpt,
+        }
     )
 
 

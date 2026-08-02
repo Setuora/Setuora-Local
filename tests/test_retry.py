@@ -12,6 +12,7 @@ from app.services import sync_worker
 from app.services import tally as tally_service
 from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 from app.services.tally import TallyResult, TallySyncError, sync_batch
+from app.services.tally_masters import GatewayCheckResult
 
 
 def test_retry_worker_start_replaces_finished_task(monkeypatch):
@@ -281,6 +282,42 @@ def test_stale_retry_click_cannot_overwrite_worker_syncing_claim(db_session, mon
     assert batch.status == BatchStatus.SYNCING.value
 
 
+def test_spammed_gateway_checks_share_one_durable_queue_item(db_session, monkeypatch):
+    queue_session = sessionmaker(bind=db_session.get_bind())
+    monkeypatch.setattr(sync_worker, "SessionLocal", queue_session)
+    monkeypatch.setattr(sync_worker, "notify_retry_worker", lambda: None)
+    calls: list[dict[str, str]] = []
+
+    def fake_gateway_check(settings):
+        calls.append(settings)
+        return GatewayCheckResult(True, "Tally gateway responded", "<ENVELOPE/>")
+
+    monkeypatch.setattr(sync_worker, "test_tally_gateway", fake_gateway_check)
+    queued = [sync_worker.queue_tally_gateway_check(db_session) for _ in range(50)]
+
+    assert len({item.request_id for item in queued}) == 1
+    assert all(item.status == "queued" for item in queued)
+    assert sync_worker.process_pending_gateway_check() == 1
+    assert sync_worker.process_pending_gateway_check() == 0
+    assert calls == [{"tally_host": "127.0.0.1", "tally_port": "9000"}]
+
+    db_session.expire_all()
+    finished = sync_worker.gateway_check_state(db_session)
+    assert finished is not None
+    assert finished.ok
+    assert finished.message == "Tally gateway responded"
+
+
+def test_gateway_check_is_processed_before_the_next_voucher(monkeypatch):
+    monkeypatch.setattr(sync_worker, "process_pending_gateway_check", lambda: 1)
+
+    def unexpected_voucher(*_args, **_kwargs):
+        raise AssertionError("voucher must wait until the queued gateway check finishes")
+
+    monkeypatch.setattr(sync_worker, "retry_pending_batches", unexpected_voucher)
+    assert sync_worker.process_next_tally_request() == 1
+
+
 def test_retry_worker_processes_tally_requests_one_at_a_time(monkeypatch):
     async def scenario():
         class DummySessionContext:
@@ -294,9 +331,8 @@ def test_retry_worker_processes_tally_requests_one_at_a_time(monkeypatch):
         maximum_active = 0
         calls = 0
 
-        def fake_retry_pending_batches(limit=10):
+        def fake_retry_pending_batches():
             nonlocal active, maximum_active, calls
-            assert limit == 1
             active += 1
             maximum_active = max(maximum_active, active)
             time.sleep(0.01)
@@ -306,7 +342,7 @@ def test_retry_worker_processes_tally_requests_one_at_a_time(monkeypatch):
 
         monkeypatch.setattr(sync_worker, "SessionLocal", lambda: DummySessionContext())
         monkeypatch.setattr(sync_worker, "_retry_interval_seconds", lambda _db: 30)
-        monkeypatch.setattr(sync_worker, "retry_pending_batches", fake_retry_pending_batches)
+        monkeypatch.setattr(sync_worker, "process_next_tally_request", fake_retry_pending_batches)
         monkeypatch.setattr(sync_worker, "TALLY_REQUEST_SPACING_SECONDS", 0.001)
         monkeypatch.setattr(sync_worker, "_worker_wake_event", asyncio.Event())
 

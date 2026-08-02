@@ -2,26 +2,200 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import json
 import logging
+from uuid import uuid4
 
 from fastapi import FastAPI
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import SessionLocal
-from app.models import Batch, BatchItem, BatchStatus, Serial, utc_now
+from app.models import Batch, BatchItem, BatchStatus, Serial, Setting, utc_now
 from app.services.settings import enabled_tally_sync_batch_types, get_all_settings
 from app.services.tally import SYNC_LEASE_MINUTES, TALLY_XML_SUPPORTED_BATCH_TYPES, sync_batch
+from app.services.tally_masters import GatewayCheckResult, test_tally_gateway
 
 
 WORKER_STATE_KEY = "setuora_retry_worker_task"
 TALLY_REQUEST_SPACING_SECONDS = 1.0
 DEFAULT_RETRY_INTERVAL_SECONDS = 180
 MIN_RETRY_INTERVAL_SECONDS = 30
+GATEWAY_CHECK_STATE_KEY = "_tally_gateway_check_state"
+GATEWAY_CHECK_LEASE_SECONDS = 30
 logger = logging.getLogger("setuora")
 _worker_loop: asyncio.AbstractEventLoop | None = None
 _worker_wake_event: asyncio.Event | None = None
+
+
+@dataclass(frozen=True)
+class GatewayCheckState:
+    request_id: str
+    status: str
+    message: str
+    response_excerpt: str = ""
+
+    @property
+    def pending(self) -> bool:
+        return self.status in {"queued", "running"}
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "succeeded"
+
+    @property
+    def failed(self) -> bool:
+        return self.status == "failed"
+
+
+def _gateway_state_payload(raw: str | None) -> dict[str, object] | None:
+    try:
+        payload = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict) or not payload.get("request_id"):
+        return None
+    return payload
+
+
+def _gateway_state_view(payload: dict[str, object] | None) -> GatewayCheckState | None:
+    if payload is None:
+        return None
+    return GatewayCheckState(
+        request_id=str(payload.get("request_id", "")),
+        status=str(payload.get("status", "")),
+        message=str(payload.get("message", "")),
+        response_excerpt=str(payload.get("response_excerpt", "")),
+    )
+
+
+def gateway_check_state(db: Session) -> GatewayCheckState | None:
+    row = db.get(Setting, GATEWAY_CHECK_STATE_KEY)
+    return _gateway_state_view(_gateway_state_payload(row.value if row else None))
+
+
+def queue_tally_gateway_check(db: Session) -> GatewayCheckState:
+    """Persist one gateway check and collapse clicks while it is queued/running."""
+    row = db.get(Setting, GATEWAY_CHECK_STATE_KEY)
+    current = _gateway_state_view(_gateway_state_payload(row.value if row else None))
+    if current and current.pending:
+        notify_retry_worker()
+        return current
+
+    settings = get_all_settings(db)
+    payload = {
+        "request_id": str(uuid4()),
+        "status": "queued",
+        "message": "Gateway test queued. Waiting for the Tally request worker.",
+        "response_excerpt": "",
+        "requested_at": utc_now().isoformat(),
+        "started_at": None,
+        "settings": {
+            "tally_host": settings.get("tally_host", ""),
+            "tally_port": settings.get("tally_port", ""),
+        },
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    if row:
+        original = row.value
+        changed = db.execute(
+            update(Setting)
+            .where(Setting.key == GATEWAY_CHECK_STATE_KEY, Setting.value == original)
+            .values(value=encoded)
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        db.commit()
+        if not changed:
+            db.expire_all()
+            concurrent = gateway_check_state(db)
+            if concurrent and concurrent.pending:
+                notify_retry_worker()
+                return concurrent
+            return queue_tally_gateway_check(db)
+    else:
+        db.add(Setting(key=GATEWAY_CHECK_STATE_KEY, value=encoded))
+        db.commit()
+
+    notify_retry_worker()
+    queued = _gateway_state_view(payload)
+    if queued is None:  # pragma: no cover - payload is constructed immediately above
+        raise RuntimeError("Could not create Tally gateway queue state")
+    return queued
+
+
+def _claim_gateway_check(db: Session) -> tuple[str, dict[str, str]] | None:
+    row = db.get(Setting, GATEWAY_CHECK_STATE_KEY)
+    payload = _gateway_state_payload(row.value if row else None)
+    if not row or payload is None:
+        return None
+
+    status = str(payload.get("status", ""))
+    if status == "running":
+        try:
+            started_at = datetime.fromisoformat(str(payload.get("started_at", "")))
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=utc_now().tzinfo)
+            if started_at > utc_now() - timedelta(seconds=GATEWAY_CHECK_LEASE_SECONDS):
+                return None
+        except (TypeError, ValueError):
+            pass
+    elif status != "queued":
+        return None
+
+    request_id = str(payload["request_id"])
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        settings = {}
+    claimed = dict(payload)
+    claimed.update(
+        status="running",
+        message="Testing the Tally gateway in the request queue...",
+        started_at=utc_now().isoformat(),
+    )
+    encoded = json.dumps(claimed, separators=(",", ":"), sort_keys=True)
+    changed = db.execute(
+        update(Setting)
+        .where(Setting.key == GATEWAY_CHECK_STATE_KEY, Setting.value == row.value)
+        .values(value=encoded)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    db.commit()
+    if not changed:
+        return None
+    return request_id, {str(key): str(value) for key, value in settings.items()}
+
+
+def _finish_gateway_check(db: Session, request_id: str, result: GatewayCheckResult) -> None:
+    row = db.get(Setting, GATEWAY_CHECK_STATE_KEY)
+    payload = _gateway_state_payload(row.value if row else None)
+    if not row or payload is None or payload.get("request_id") != request_id:
+        return
+    payload.update(
+        status="succeeded" if result.ok else "failed",
+        message=result.message,
+        response_excerpt=result.response_excerpt,
+        completed_at=utc_now().isoformat(),
+    )
+    row.value = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    db.commit()
+
+
+def process_pending_gateway_check() -> int:
+    with SessionLocal() as db:
+        claim = _claim_gateway_check(db)
+    if claim is None:
+        return 0
+    request_id, settings = claim
+    try:
+        result = test_tally_gateway(settings)
+    except Exception as exc:
+        logger.exception("Queued Tally gateway check failed")
+        result = GatewayCheckResult(False, f"Tally gateway check failed: {exc}")
+    with SessionLocal() as db:
+        _finish_gateway_check(db, request_id, result)
+    return 1
 
 
 def _retry_interval_seconds(db: Session) -> int:
@@ -116,6 +290,13 @@ def retry_pending_batches(limit: int = 10) -> int:
         return len(batches)
 
 
+def process_next_tally_request() -> int:
+    """Process one queued gateway check or voucher through one consumer."""
+    if process_pending_gateway_check():
+        return 1
+    return retry_pending_batches(1)
+
+
 async def retry_worker_loop() -> None:
     wake_event = _worker_wake_event or asyncio.Event()
     while True:
@@ -126,7 +307,7 @@ async def retry_worker_loop() -> None:
 
             # One consumer and one item per pass guarantee that Tally never
             # receives concurrent requests from this process.
-            processed = await asyncio.to_thread(retry_pending_batches, 1)
+            processed = await asyncio.to_thread(process_next_tally_request)
             if processed:
                 await asyncio.sleep(TALLY_REQUEST_SPACING_SECONDS)
                 continue
@@ -134,7 +315,7 @@ async def retry_worker_loop() -> None:
             # Clear before the final scan so a notification cannot be lost in
             # the gap between checking the database and starting to wait.
             wake_event.clear()
-            processed = await asyncio.to_thread(retry_pending_batches, 1)
+            processed = await asyncio.to_thread(process_next_tally_request)
             if processed:
                 await asyncio.sleep(TALLY_REQUEST_SPACING_SECONDS)
                 continue

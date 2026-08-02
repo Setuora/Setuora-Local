@@ -211,18 +211,27 @@
           <h3>Tally verification</h3>
           <p>Check the gateway and confirm exact master names for the active company.</p>
         </div>
-        <form method="post" action="/tally-check/test-gateway">
-          <button class="button" type="submit">Test gateway</button>
+        <form method="post" action="/tally-check/test-gateway" data-tally-gateway-form>
+          <button class="button" type="submit" data-tally-gateway-button {{ 'disabled' if result and result.pending else '' }}>
+            {{ 'Test queued' if result and result.pending else 'Test gateway' }}
+          </button>
         </form>
       </div>
 
       {% if result %}
-      <div class="alert {{ 'success' if result.ok else 'error' }}" role="status">
-        <strong>{{ result.message }}</strong>
+      <div
+        class="alert {{ 'warn' if result.pending else ('success' if result.ok else 'error') }}"
+        role="status"
+        data-tally-gateway-result
+        data-status="{{ result.status }}"
+      >
+        <strong data-tally-gateway-message>{{ result.message }}</strong>
         {% if result.ok %}
-        <small class="gateway-result-detail">The configured Tally HTTP server is reachable and responding correctly.</small>
+        <small class="gateway-result-detail" data-tally-gateway-detail>The configured Tally HTTP server is reachable and responding correctly.</small>
+        {% elif result.pending %}
+        <small class="gateway-result-detail" data-tally-gateway-detail>This page will update automatically when the queued check finishes.</small>
         {% elif result.response_excerpt %}
-        <pre class="response-preview">{{ result.response_excerpt }}</pre>
+        <pre class="response-preview" data-tally-gateway-excerpt>{{ result.response_excerpt }}</pre>
         {% endif %}
       </div>
       {% endif %}
@@ -712,6 +721,48 @@
         initializeAutomaticRefresh();
       }
     });
+
+    const gatewayResult = document.querySelector("[data-tally-gateway-result]");
+    const gatewayButton = document.querySelector("[data-tally-gateway-button]");
+    if (gatewayResult && ["queued", "running"].includes(gatewayResult.dataset.status)) {
+      const gatewayMessage = gatewayResult.querySelector("[data-tally-gateway-message]");
+      const gatewayDetail = gatewayResult.querySelector("[data-tally-gateway-detail]");
+      const pollGateway = async () => {
+        try {
+          const payload = await fetchPayload("/tally-check/test-gateway/status");
+          gatewayResult.dataset.status = payload.status;
+          if (gatewayMessage) gatewayMessage.textContent = payload.message || "Tally gateway check finished.";
+          if (payload.pending) {
+            gatewayResult.className = "alert warn";
+            window.setTimeout(pollGateway, 1000);
+            return;
+          }
+          gatewayResult.className = "alert " + (payload.gateway_ok ? "success" : "error");
+          if (gatewayDetail) {
+            gatewayDetail.textContent = payload.gateway_ok
+              ? "The configured Tally HTTP server is reachable and responding correctly."
+              : "The queued check finished. Verify that TallyPrime and its HTTP server are running.";
+          }
+          if (payload.response_excerpt) {
+            let excerpt = gatewayResult.querySelector("[data-tally-gateway-excerpt]");
+            if (!excerpt) {
+              excerpt = document.createElement("pre");
+              excerpt.className = "response-preview";
+              excerpt.dataset.tallyGatewayExcerpt = "";
+              gatewayResult.appendChild(excerpt);
+            }
+            excerpt.textContent = payload.response_excerpt;
+          }
+          if (gatewayButton) {
+            gatewayButton.disabled = false;
+            gatewayButton.textContent = "Test gateway";
+          }
+        } catch (_error) {
+          window.setTimeout(pollGateway, 2000);
+        }
+      };
+      window.setTimeout(pollGateway, 500);
+    }
   })();
 </script>
 {% endblock %}

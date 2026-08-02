@@ -345,8 +345,9 @@ def post_to_tally(xml: str, settings: dict[str, str]) -> TallyResult:
     url = f"http://{host}:{port}"
     request = Request(url, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, method="POST")
     try:
-        with urlopen(request, timeout=5) as response:
-            response_xml = response.read().decode("utf-8", errors="replace")
+        with TALLY_REQUEST_LOCK:
+            with urlopen(request, timeout=5) as response:
+                response_xml = response.read().decode("utf-8", errors="replace")
     except (URLError, OSError) as exc:
         raise TallySyncError("Tally connection failed", retryable=True, request_xml=xml) from exc
 
@@ -379,8 +380,10 @@ def post_to_tally(xml: str, settings: dict[str, str]) -> TallyResult:
     return TallyResult(request_xml=xml, response_xml=response_xml, reference=reference)
 
 
-# Prevent request/retry races from posting the same voucher twice.
-_SYNC_LOCK = threading.Lock()
+# Serialize voucher, gateway-check, and read-only discovery traffic. Tally's
+# local HTTP server is easily overloaded by overlapping requests.
+TALLY_REQUEST_LOCK = threading.RLock()
+_SYNC_LOCK = TALLY_REQUEST_LOCK
 
 
 def sync_batch(db: Session, batch: Batch) -> None:

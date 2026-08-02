@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Product, TallyMasterConfirmation, User, utc_now
 from app.services.settings import get_all_settings, parse_sales_gst_ledger_mappings
+from app.services.tally import TALLY_REQUEST_LOCK
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,9 @@ class GatewayCheckResult:
 
 class TallyDataError(RuntimeError):
     """Raised when read-only data discovery from Tally cannot be completed."""
+
+
+TALLY_GATEWAY_TEST_TIMEOUT_SECONDS = 15
 
 
 @dataclass(frozen=True)
@@ -348,8 +352,9 @@ def _post_read_request(settings: dict[str, str], xml: str) -> tuple[str, ET.Elem
     url = f"http://{host}:{port}"
     request = Request(url, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, method="POST")
     try:
-        with urlopen(request, timeout=8) as response:
-            body = response.read().decode("utf-8", errors="replace")
+        with TALLY_REQUEST_LOCK:
+            with urlopen(request, timeout=8) as response:
+                body = response.read().decode("utf-8", errors="replace")
     except URLError as exc:
         reason = getattr(exc, "reason", exc)
         raise TallyDataError(f"Tally gateway did not respond: {reason}") from exc
@@ -515,16 +520,29 @@ def fetch_tally_sales_book(
 
 
 def test_tally_gateway(settings: dict[str, str]) -> GatewayCheckResult:
+    host = settings.get("tally_host", "").strip()
+    port = settings.get("tally_port", "").strip()
+    if not host or not port:
+        return GatewayCheckResult(False, "Tally host and port are not configured")
     xml = build_company_list_xml()
-    url = f"http://{settings['tally_host']}:{settings['tally_port']}"
+    url = f"http://{host}:{port}"
     request = Request(url, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, method="POST")
     try:
-        with urlopen(request, timeout=5) as response:
-            body = response.read().decode("utf-8", errors="replace")
+        with TALLY_REQUEST_LOCK:
+            with urlopen(request, timeout=TALLY_GATEWAY_TEST_TIMEOUT_SECONDS) as response:
+                body = response.read().decode("utf-8", errors="replace")
     except URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            return GatewayCheckResult(
+                False,
+                f"Tally gateway timed out after {TALLY_GATEWAY_TEST_TIMEOUT_SECONDS} seconds",
+            )
         return GatewayCheckResult(False, f"Tally gateway did not respond: {exc.reason}")
     except TimeoutError:
-        return GatewayCheckResult(False, "Tally gateway timed out")
+        return GatewayCheckResult(
+            False,
+            f"Tally gateway timed out after {TALLY_GATEWAY_TEST_TIMEOUT_SECONDS} seconds",
+        )
     excerpt = " ".join(body.split())[:500]
     if not body.strip():
         return GatewayCheckResult(False, "Tally gateway returned an empty response")
