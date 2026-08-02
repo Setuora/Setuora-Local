@@ -68,6 +68,22 @@ def test_setup_has_a_data_preserving_repair_mode():
     assert 'Start-ManagedService -Name $AppServiceName -DisplayName "Setuora"' in setup_script
 
 
+def test_repair_restores_only_missing_tracked_runtime_helpers_before_stopping():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+    restore_function = setup_script.split("function Restore-MissingTrackedRuntimeFiles", 1)[1].split(
+        "function Find-CaddyExecutable", 1
+    )[0]
+
+    assert '"deployment/windows/start_setuora.ps1"' in restore_function
+    assert "-not (Test-Path -LiteralPath" in restore_function
+    assert "ls-files --error-unmatch -- $relativePath" in restore_function
+    assert "restore --source=HEAD --worktree -- $relativePath" in restore_function
+    assert "reset --hard" not in restore_function
+    assert setup_script.index("Restore-MissingTrackedRuntimeFiles\n}") < setup_script.index(
+        'Write-Section "Stop Existing Server"'
+    )
+
+
 def test_updater_preserves_clean_diverged_history_before_realigning():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 

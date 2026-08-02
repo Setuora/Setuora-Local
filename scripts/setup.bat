@@ -374,6 +374,43 @@ function Test-AdminShell {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Restore-MissingTrackedRuntimeFiles {
+    $requiredFiles = @(
+        "scripts/start_setuora.bat",
+        "scripts/stop_setuora.bat",
+        "deployment/windows/start_setuora.ps1",
+        "deployment/windows/stop_setuora.ps1",
+        "deployment/windows/server_processes.ps1",
+        "deployment/windows/install_service.ps1"
+    )
+    $missingFiles = @(
+        $requiredFiles | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $ProjectRoot $_))
+        }
+    )
+    if ($missingFiles.Count -eq 0) {
+        return
+    }
+
+    $git = Get-Command git.exe -ErrorAction SilentlyContinue
+    if (-not $git -or -not (Test-Path -LiteralPath (Join-Path $ProjectRoot ".git"))) {
+        throw "Required Setuora runtime files are missing and cannot be restored because this installation is not a usable Git checkout. Run Setuora.exe setup to download a complete installation."
+    }
+
+    Write-Host "Restoring missing Setuora runtime files from the installed version..." -ForegroundColor Yellow
+    foreach ($relativePath in $missingFiles) {
+        & $git.Source -C $ProjectRoot ls-files --error-unmatch -- $relativePath | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "The required runtime file '$relativePath' is not recorded in the installed Setuora version. Run Setuora.exe update, then retry repair."
+        }
+        & $git.Source -C $ProjectRoot restore --source=HEAD --worktree -- $relativePath
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $ProjectRoot $relativePath))) {
+            throw "Git could not restore the required runtime file '$relativePath'. Run Setuora.exe setup to repair the installation."
+        }
+        Write-Host "Restored $relativePath"
+    }
+}
+
 function Find-CaddyExecutable {
     $command = Get-Command caddy.exe -ErrorAction SilentlyContinue
     if ($command) {
@@ -973,6 +1010,10 @@ else {
 
 Set-Location $ProjectRoot
 New-Item -ItemType Directory -Force -Path $DataDir, $LogsDir | Out-Null
+
+if ($Repair) {
+    Restore-MissingTrackedRuntimeFiles
+}
 
 if ($Repair -and (Test-Path $ProcessHelper)) {
     . $ProcessHelper
