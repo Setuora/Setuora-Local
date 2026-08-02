@@ -63,14 +63,18 @@ def test_camera_scan_route_adds_multiple_serials_without_restarting():
             responses.append(client.post(
                 f"/batches/{batch_id}/scan",
                 data={"serial_number": serial_number, "scan_source": "camera"},
-                headers={"Accept": "application/json"},
-                cookies={SESSION_COOKIE: create_session_token(1)},
+                headers={
+                    "Accept": "application/json",
+                    "Cookie": f"{SESSION_COOKIE}={create_session_token(1)}",
+                },
             ))
             shelf_responses.append(client.post(
                 f"/batches/{batch_id}/scan",
                 data={"serial_number": "SCAN-SHELF", "scan_source": "camera"},
-                headers={"Accept": "application/json"},
-                cookies={SESSION_COOKIE: create_session_token(1)},
+                headers={
+                    "Accept": "application/json",
+                    "Cookie": f"{SESSION_COOKIE}={create_session_token(1)}",
+                },
             ))
     finally:
         app.dependency_overrides.clear()
@@ -136,7 +140,7 @@ def test_sale_return_mode_removes_item_and_requires_shelf_before_submit():
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    cookies = {SESSION_COOKIE: create_session_token(1)}
+    session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         returned = client.post(
@@ -146,8 +150,7 @@ def test_sale_return_mode_removes_item_and_requires_shelf_before_submit():
                 "scan_source": "camera",
                 "scan_mode": "return",
             },
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
         blocked_scan = client.post(
             f"/batches/{batch_id}/scan",
@@ -156,10 +159,9 @@ def test_sale_return_mode_removes_item_and_requires_shelf_before_submit():
                 "scan_source": "camera",
                 "scan_mode": "sale",
             },
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
-        blocked_submit = client.post(f"/batches/{batch_id}/submit", cookies=cookies)
+        blocked_submit = client.post(f"/batches/{batch_id}/submit", headers=session_headers)
         shelf = client.post(
             f"/batches/{batch_id}/scan",
             data={
@@ -167,10 +169,9 @@ def test_sale_return_mode_removes_item_and_requires_shelf_before_submit():
                 "scan_source": "camera",
                 "scan_mode": "return",
             },
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
-        submitted = client.post(f"/batches/{batch_id}/submit", cookies=cookies)
+        submitted = client.post(f"/batches/{batch_id}/submit", headers=session_headers)
     finally:
         app.dependency_overrides.clear()
 

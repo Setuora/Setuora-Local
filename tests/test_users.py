@@ -63,9 +63,9 @@ def test_super_admin_can_delete_unused_user():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(1)}
-        page = client.get("/users", cookies=cookies)
-        delete = client.post("/users/2/delete", cookies=cookies)
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        page = client.get("/users", headers=session_headers)
+        delete = client.post("/users/2/delete", headers=session_headers)
     finally:
         app.dependency_overrides.clear()
 
@@ -126,12 +126,12 @@ def test_user_delete_is_super_admin_only_and_archives_history_user():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(1)})
-        admin_delete = client.post("/users/3/delete", cookies={SESSION_COOKIE: create_session_token(1)})
-        self_delete = client.post("/users/2/delete", cookies={SESSION_COOKIE: create_session_token(2)})
-        used_delete = client.post("/users/3/delete", cookies={SESSION_COOKIE: create_session_token(2)})
-        after_delete_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(2)})
-        deleted_session_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(3)})
+        admin_page = client.get("/users", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
+        admin_delete = client.post("/users/3/delete", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
+        self_delete = client.post("/users/2/delete", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"})
+        used_delete = client.post("/users/3/delete", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"})
+        after_delete_page = client.get("/users", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"})
+        deleted_session_page = client.get("/users", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(3)}"})
     finally:
         app.dependency_overrides.clear()
 
@@ -173,11 +173,11 @@ def test_super_admin_can_reset_another_users_password():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(1)}
-        page = client.get("/users", cookies=cookies)
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        page = client.get("/users", headers=session_headers)
         response = client.post(
             "/users/2/password",
-            cookies=cookies,
+            headers=session_headers,
             data={
                 "new_password": "new-staff-pass",
                 "confirm_password": "new-staff-pass",
@@ -222,25 +222,25 @@ def test_password_reset_is_super_admin_only_and_validates_input():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(1)})
+        admin_page = client.get("/users", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
         admin_reset = client.post(
             "/users/3/password",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
             data={"new_password": "changed-pass", "confirm_password": "changed-pass"},
         )
         short_reset = client.post(
             "/users/3/password",
-            cookies={SESSION_COOKIE: create_session_token(2)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"},
             data={"new_password": "short", "confirm_password": "short"},
         )
         mismatch_reset = client.post(
             "/users/3/password",
-            cookies={SESSION_COOKIE: create_session_token(2)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"},
             data={"new_password": "changed-pass", "confirm_password": "different-pass"},
         )
         self_reset = client.post(
             "/users/2/password",
-            cookies={SESSION_COOKIE: create_session_token(2)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"},
             data={"new_password": "changed-pass", "confirm_password": "changed-pass"},
         )
     finally:
@@ -311,18 +311,18 @@ def test_users_menu_assigns_company_ledger_and_tally_user_access():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(1)}
-        before = client.get("/users", cookies=cookies)
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        before = client.get("/users", headers=session_headers)
         saved = client.post(
             "/users/2/tally-access",
-            cookies=cookies,
+            headers=session_headers,
             data={
                 "company_id": str(company_id),
                 "ledger_id": str(ledger_id),
                 "tally_user": f"{company_id}:operator-a",
             },
         )
-        after = client.get("/users", cookies=cookies)
+        after = client.get("/users", headers=session_headers)
     finally:
         app.dependency_overrides.clear()
 

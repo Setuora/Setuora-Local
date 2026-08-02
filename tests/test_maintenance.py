@@ -71,13 +71,13 @@ def test_database_reset_is_visible_only_to_super_admin_and_route_is_protected():
     app.dependency_overrides[get_db] = override_db(Session)
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_cookies = {SESSION_COOKIE: create_session_token(1)}
-        root_cookies = {SESSION_COOKIE: create_session_token(2)}
-        admin_page = client.get("/maintenance", cookies=admin_cookies)
-        root_page = client.get("/maintenance", cookies=root_cookies)
+        admin_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        root_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"}
+        admin_page = client.get("/maintenance", headers=admin_headers)
+        root_page = client.get("/maintenance", headers=root_headers)
         admin_reset = client.post(
             "/maintenance/reset",
-            cookies=admin_cookies,
+            headers=admin_headers,
             data={"super_admin_password": "admin-pass", "confirm_reset": "RESET"},
         )
     finally:
@@ -105,15 +105,15 @@ def test_database_reset_requires_password_and_confirmation_before_clearing_data(
     app.dependency_overrides[get_db] = override_db(Session)
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(1)}
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
         bad_confirmation = client.post(
             "/maintenance/reset",
-            cookies=cookies,
+            headers=session_headers,
             data={"super_admin_password": "root-pass", "confirm_reset": "reset"},
         )
         bad_password = client.post(
             "/maintenance/reset",
-            cookies=cookies,
+            headers=session_headers,
             data={"super_admin_password": "wrong-pass", "confirm_reset": "RESET"},
         )
     finally:
@@ -156,7 +156,7 @@ def test_super_admin_database_reset_clears_database_and_preserves_current_super_
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         response = client.post(
             "/maintenance/reset",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
             data={"super_admin_password": "root-pass", "confirm_reset": "RESET"},
         )
     finally:
@@ -249,7 +249,7 @@ def test_database_reset_clears_relocation_history_despite_delete_guards():
     try:
         response = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"}).post(
             "/maintenance/reset",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
             data={"super_admin_password": "root-pass", "confirm_reset": "RESET"},
         )
     finally:
@@ -286,7 +286,7 @@ def test_restore_upload_rejects_invalid_backup_file():
     try:
         response = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"}).post(
             "/maintenance/restore-upload",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
             data={"super_admin_password": "root-pass", "confirm_restore": "IMPORT"},
             files={"upload": ("bad.db", BytesIO(b"not sqlite"), "application/octet-stream")},
         )
@@ -312,7 +312,7 @@ def test_download_backup_failure_redirects_to_maintenance(monkeypatch):
     try:
         response = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"}).get(
             "/maintenance/backup.db",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
     finally:
         app.dependency_overrides.clear()

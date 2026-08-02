@@ -71,8 +71,8 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(1)}
-        page = client.get("/tally-check", cookies=cookies)
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        page = client.get("/tally-check", headers=session_headers)
         visible_config = {
             key: value
             for key, value in COMPANY_CONFIG.items()
@@ -87,8 +87,7 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
         }
         update = client.post(
             f"/tally-check/companies/{company_id}",
-            cookies=cookies,
-            headers={"Accept": "application/json"},
+            headers={**session_headers, "Accept": "application/json"},
             data={
                 **visible_config,
                 "name": "Edited Label",
@@ -136,17 +135,17 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
         ):
             live_companies = client.get(
                 f"/tally-check/companies/{company_id}/live/companies",
-                cookies=cookies,
+                headers=session_headers,
             )
             live_ledgers = client.get(
                 f"/tally-check/companies/{company_id}/live/ledgers",
                 params={"tally_company": "Live Company"},
-                cookies=cookies,
+                headers=session_headers,
             )
             live_locations = client.get(
                 f"/tally-check/companies/{company_id}/live/stock-locations",
                 params={"tally_company": "Live Company"},
-                cookies=cookies,
+                headers=session_headers,
             )
             live_sales = client.get(
                 f"/tally-check/companies/{company_id}/live/sales-book",
@@ -155,7 +154,7 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                     "from_date": "2026-04-01",
                     "to_date": "2026-07-15",
                 },
-                cookies=cookies,
+                headers=session_headers,
             )
             cached_data = client.get(
                 f"/tally-check/companies/{company_id}/cached",
@@ -164,9 +163,9 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                     "from_date": "2026-04-01",
                     "to_date": "2026-07-15",
                 },
-                cookies=cookies,
+                headers=session_headers,
             )
-            gateway_check = client.post("/tally-check/test-gateway", cookies=cookies)
+            gateway_check = client.post("/tally-check/test-gateway", headers=session_headers)
     finally:
         app.dependency_overrides.clear()
 
@@ -313,8 +312,8 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(1)}
-        page = client.get("/tally-check", cookies=cookies)
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        page = client.get("/tally-check", headers=session_headers)
         visible = client.get(
             f"/tally-check/companies/{assigned_id}/cached",
             params={
@@ -322,7 +321,7 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
                 "from_date": "2026-04-01",
                 "to_date": "2026-07-15",
             },
-            cookies=cookies,
+            headers=session_headers,
         )
         blocked = client.get(
             f"/tally-check/companies/{hidden_id}/cached",
@@ -331,7 +330,7 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
                 "from_date": "2026-04-01",
                 "to_date": "2026-07-15",
             },
-            cookies=cookies,
+            headers=session_headers,
         )
         wrong_tally_company = client.get(
             f"/tally-check/companies/{assigned_id}/cached",
@@ -340,7 +339,7 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
                 "from_date": "2026-04-01",
                 "to_date": "2026-07-15",
             },
-            cookies=cookies,
+            headers=session_headers,
         )
     finally:
         app.dependency_overrides.clear()

@@ -68,7 +68,7 @@ def _client_with_user(must_change=True):
 def test_must_change_password_gate_redirects_protected_route():
     client, Session, engine = _client_with_user(must_change=True)
     try:
-        response = client.get("/", cookies={SESSION_COOKIE: create_session_token(1)})
+        response = client.get("/", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -86,7 +86,7 @@ def test_change_password_clears_flag_and_updates_hash():
                 "new_password": "a-strong-new-pass",
                 "confirm_password": "a-strong-new-pass",
             },
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         with Session() as db:
             user = db.get(User, 1)
@@ -105,7 +105,7 @@ def test_change_password_rejects_short_password():
         response = client.post(
             "/account/password",
             data={"current_password": "admin123", "new_password": "short", "confirm_password": "short"},
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
     finally:
         app.dependency_overrides.clear()

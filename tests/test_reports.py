@@ -146,7 +146,7 @@ def test_reports_page_renders_scan_and_transaction_rows():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(1)})
+        response = client.get("/reports", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -302,18 +302,18 @@ def test_reports_product_dropdown_filters_product_specific_rows_and_exports():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        response = client.get(f"/reports?product_id={selected_id}", cookies={SESSION_COOKIE: create_session_token(1)})
+        response = client.get(f"/reports?product_id={selected_id}", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
         all_products_response = client.get(
             "/reports?action=&product_id=&start=&end=",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         invalid_product_response = client.get(
             "/reports?product_id=not-a-product",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         export = client.get(
             f"/reports/transactions.xlsx?product_id={selected_id}",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
     finally:
         app.dependency_overrides.clear()
@@ -1276,9 +1276,9 @@ def test_loss_report_shows_factor_values_for_admin_and_super_admin():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(1)})
-        root_response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(2)})
-        sales_response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(3)})
+        admin_response = client.get("/reports", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
+        root_response = client.get("/reports", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"})
+        sales_response = client.get("/reports", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(3)}"})
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -1346,8 +1346,8 @@ def test_dashboard_renders_stock_and_activity_charts():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        response = client.get("/", cookies={SESSION_COOKIE: create_session_token(1)})
-        data_response = client.get("/dashboard/data", cookies={SESSION_COOKIE: create_session_token(1)})
+        response = client.get("/", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
+        data_response = client.get("/dashboard/data", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
     finally:
         app.dependency_overrides.clear()
         engine.dispose()

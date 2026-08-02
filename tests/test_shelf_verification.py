@@ -66,10 +66,10 @@ def test_admin_sets_shelf_verification_interval_on_products_page():
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    cookies = {SESSION_COOKIE: create_session_token(1)}
+    session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        page = client.get("/products", cookies=cookies)
+        page = client.get("/products", headers=session_headers)
         update = client.post(
             f"/products/{product_id}/pricing",
             data={
@@ -77,8 +77,7 @@ def test_admin_sets_shelf_verification_interval_on_products_page():
                 "sales_discount_rate": "0",
                 "shelf_verification_interval": "6",
             },
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
         rejected_zero = client.post(
             f"/products/{product_id}/pricing",
@@ -87,8 +86,7 @@ def test_admin_sets_shelf_verification_interval_on_products_page():
                 "sales_discount_rate": "0",
                 "shelf_verification_interval": "0",
             },
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
     finally:
         app.dependency_overrides.clear()
@@ -159,50 +157,44 @@ def test_purchase_requires_shelf_qr_at_interval_and_before_submit():
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    cookies = {SESSION_COOKIE: create_session_token(1)}
+    session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
 
         first = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": serial_numbers[0], "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
         second = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": serial_numbers[1], "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
         blocked = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": serial_numbers[2], "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
-        incomplete = client.post(f"/batches/{batch_id}/submit", cookies=cookies)
-        dashboard_pending = client.get("/", cookies=cookies)
+        incomplete = client.post(f"/batches/{batch_id}/submit", headers=session_headers)
+        dashboard_pending = client.get("/", headers=session_headers)
         shelf = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": "LOC-A-01", "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
         third = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": serial_numbers[2], "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
-        final_incomplete = client.post(f"/batches/{batch_id}/submit", cookies=cookies)
+        final_incomplete = client.post(f"/batches/{batch_id}/submit", headers=session_headers)
         final_shelf = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": "LOC-A-01", "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
-        submitted = client.post(f"/batches/{batch_id}/submit", cookies=cookies)
+        submitted = client.post(f"/batches/{batch_id}/submit", headers=session_headers)
     finally:
         app.dependency_overrides.clear()
 
@@ -296,20 +288,18 @@ def test_auditor_can_verify_shelf_and_location_mismatch_is_logged():
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    cookies = {SESSION_COOKIE: create_session_token(1)}
+    session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         product_scan = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": "AUD-SHELF-000001", "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
         shelf_scan = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": "LOC-ACTUAL", "scan_source": "camera"},
-            headers={"Accept": "application/json"},
-            cookies=cookies,
+            headers={**session_headers, "Accept": "application/json"},
         )
     finally:
         app.dependency_overrides.clear()

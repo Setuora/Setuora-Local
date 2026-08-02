@@ -267,24 +267,26 @@ def test_relocation_routes_enforce_roles_and_record_android_device():
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         purchase_page = client.get(
             "/warehouse/move",
-            cookies={SESSION_COOKIE: create_session_token(2)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"},
         )
         auditor_page = client.get(
             "/warehouse/move",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         auditor_locations = client.get(
             "/warehouse/locations",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         manager_locations = client.get(
             "/warehouse/locations",
-            cookies={SESSION_COOKIE: create_session_token(3)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(3)}"},
         )
         moved = client.post(
             "/warehouse/relocate",
-            cookies={SESSION_COOKIE: create_session_token(1)},
-            headers={"User-Agent": "Mozilla/5.0 (Linux; Android 14) Chrome/120"},
+            headers={
+                "Cookie": f"{SESSION_COOKIE}={create_session_token(1)}",
+                "User-Agent": "Mozilla/5.0 (Linux; Android 14) Chrome/120",
+            },
             json={
                 "destination_id": destination_id,
                 "reason": "Route test",
@@ -300,19 +302,19 @@ def test_relocation_routes_enforce_roles_and_record_android_device():
         )
         history_page = client.get(
             "/warehouse/history",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         map_page = client.get(
             "/warehouse/map",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         location_qr = client.get(
             f"/warehouse/locations/{destination_id}/qr.png",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         location_labels = client.get(
             f"/warehouse/locations/labels.pdf?ids={source_id},{destination_id}",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
     finally:
         app.dependency_overrides.clear()

@@ -162,9 +162,9 @@ def test_role_access_page_is_super_admin_only():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        root_response = client.get("/settings/access", cookies={SESSION_COOKIE: create_session_token(3)})
-        admin_response = client.get("/settings/access", cookies={SESSION_COOKIE: create_session_token(1)})
-        purchase_response = client.get("/settings/access", cookies={SESSION_COOKIE: create_session_token(2)})
+        root_response = client.get("/settings/access", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(3)}"})
+        admin_response = client.get("/settings/access", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
+        purchase_response = client.get("/settings/access", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"})
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -242,18 +242,18 @@ def test_super_admin_can_change_role_access_and_route_uses_saved_permission():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_cookies = {SESSION_COOKIE: create_session_token(1)}
-        root_cookies = {SESSION_COOKIE: create_session_token(2)}
-        allowed_response = client.get("/reports", cookies=admin_cookies)
+        admin_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        root_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"}
+        allowed_response = client.get("/reports", headers=admin_headers)
         save_response = client.post(
             "/settings/access",
             data={
                 "access__page_reports__admin": "hidden",
                 "access__reports_data__admin": "no",
             },
-            cookies=root_cookies,
+            headers=root_headers,
         )
-        blocked_response = client.get("/reports", cookies=admin_cookies)
+        blocked_response = client.get("/reports", headers=admin_headers)
     finally:
         app.dependency_overrides.clear()
 
@@ -291,9 +291,9 @@ def test_label_file_view_access_cannot_mark_labels_printed():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        cookies = {SESSION_COOKIE: create_session_token(2)}
-        preview_response = client.get("/serials/labels", cookies=cookies)
-        print_response = client.post("/serials/labels/print", json={"ids": []}, cookies=cookies)
+        session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"}
+        preview_response = client.get("/serials/labels", headers=session_headers)
+        print_response = client.post("/serials/labels/print", json={"ids": []}, headers=session_headers)
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -340,17 +340,17 @@ def test_hidden_pages_and_actions_appear_after_super_admin_grants_access():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_cookies = {SESSION_COOKIE: create_session_token(1)}
-        root_cookies = {SESSION_COOKIE: create_session_token(2)}
+        admin_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
+        root_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"}
 
-        dashboard_before = client.get("/", cookies=admin_cookies)
-        products_before = client.get("/products", cookies=admin_cookies)
-        reports_before = client.get("/reports", cookies=admin_cookies)
-        maintenance_before = client.get("/maintenance", cookies=admin_cookies)
+        dashboard_before = client.get("/", headers=admin_headers)
+        products_before = client.get("/products", headers=admin_headers)
+        reports_before = client.get("/reports", headers=admin_headers)
+        maintenance_before = client.get("/maintenance", headers=admin_headers)
 
         grant = client.post(
             "/settings/access",
-            cookies=root_cookies,
+            headers=root_headers,
             data={
                 "access__page_reports__admin": "shown",
                 "access__batch_purchase__admin": "edit",
@@ -360,10 +360,10 @@ def test_hidden_pages_and_actions_appear_after_super_admin_grants_access():
             },
         )
 
-        dashboard_after = client.get("/", cookies=admin_cookies)
-        products_after = client.get("/products", cookies=admin_cookies)
-        reports_after = client.get("/reports", cookies=admin_cookies)
-        maintenance_after = client.get("/maintenance", cookies=admin_cookies)
+        dashboard_after = client.get("/", headers=admin_headers)
+        products_after = client.get("/products", headers=admin_headers)
+        reports_after = client.get("/reports", headers=admin_headers)
+        maintenance_after = client.get("/maintenance", headers=admin_headers)
     finally:
         app.dependency_overrides.clear()
         engine.dispose()

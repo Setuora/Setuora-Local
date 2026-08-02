@@ -359,12 +359,12 @@ def test_stock_movement_page_and_exports_follow_role_access():
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        admin_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(1)})
-        manager_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(2)})
-        sales_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(3)})
+        admin_response = client.get("/stock-movement", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
+        manager_response = client.get("/stock-movement", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"})
+        sales_response = client.get("/stock-movement", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(3)}"})
         removed_csv_response = client.get(
             "/stock-movement/export.csv",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         save_response = client.post(
             "/stock-movement/settings",
@@ -374,7 +374,7 @@ def test_stock_movement_page_and_exports_follow_role_access():
                 "slow_below_pct": "30",
                 "medium_up_to_pct": "70",
             },
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
         manager_save_response = client.post(
             "/stock-movement/settings",
@@ -384,7 +384,7 @@ def test_stock_movement_page_and_exports_follow_role_access():
                 "slow_below_pct": "40",
                 "medium_up_to_pct": "80",
             },
-            cookies={SESSION_COOKIE: create_session_token(2)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(2)}"},
         )
         with Session() as db:
             saved_analysis_days = get_setting(db, "movement_analysis_days")

@@ -145,7 +145,7 @@ def test_autosave_route_records_settings_audit():
         response = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"}).post(
             "/settings/autosave",
             data=requested,
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
     finally:
         app.dependency_overrides.clear()
@@ -182,12 +182,12 @@ def test_settings_routes_preserve_removed_fields_when_omitted():
         "round_off_ledger_name": "Round Off",
         "retry_interval_seconds": "180",
     }
-    cookies = {SESSION_COOKIE: create_session_token(1)}
+    session_headers = {"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"}
     app.dependency_overrides[get_db] = override_get_db
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
-        autosave = client.post("/settings/autosave", data=visible_fields, cookies=cookies)
-        save = client.post("/settings", data=visible_fields, cookies=cookies)
+        autosave = client.post("/settings/autosave", data=visible_fields, headers=session_headers)
+        save = client.post("/settings", data=visible_fields, headers=session_headers)
     finally:
         app.dependency_overrides.clear()
 
@@ -233,9 +233,9 @@ def test_settings_saves_purchase_and_sales_sync_separately(monkeypatch):
         response = client.post(
             "/settings",
             data=form,
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
-        page = client.get("/settings", cookies={SESSION_COOKIE: create_session_token(1)})
+        page = client.get("/settings", headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"})
     finally:
         app.dependency_overrides.clear()
 
@@ -276,7 +276,7 @@ def test_create_company_without_legacy_tally_fields_inherits_current_values():
                 "sales_gst_ledger_mappings": "",
                 "round_off_ledger_name": "Round Off",
             },
-            cookies={SESSION_COOKIE: create_session_token(1)},
+            headers={"Cookie": f"{SESSION_COOKIE}={create_session_token(1)}"},
         )
     finally:
         app.dependency_overrides.clear()
