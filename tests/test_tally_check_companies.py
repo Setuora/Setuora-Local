@@ -1,4 +1,5 @@
 from datetime import date
+import json
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -9,9 +10,10 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Company, TallyLedgerCache, User
+from app.models import Company, TallyDataJob, TallyLedgerCache, User
 from app.security import create_session_token
 from app.services.settings import add_company, get_all_settings
+from app.services import tally_jobs
 from app.services.sync_worker import GatewayCheckState
 from app.services.tally_access import replace_user_access
 from app.services.tally_cache import replace_cached_ledgers, replace_cached_sales_book
@@ -97,22 +99,22 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
         )
         with (
             patch(
-                "app.routers.tally_check.fetch_tally_companies",
+                "app.services.tally_jobs.fetch_tally_companies",
                 return_value=["Live Company", "Other Company"],
             ),
             patch(
-                "app.routers.tally_check.fetch_tally_ledgers",
+                "app.services.tally_jobs.fetch_tally_ledgers",
                 return_value=[TallyLedger("Customer A", "Sundry Debtors", "-500.00")],
             ),
             patch(
-                "app.routers.tally_check.fetch_tally_stock_locations",
+                "app.services.tally_jobs.fetch_tally_stock_locations",
                 return_value=[
                     TallyStockLocation("Main Location"),
                     TallyStockLocation("Franchise Mysuru", "Main Location"),
                 ],
             ),
             patch(
-                "app.routers.tally_check.fetch_tally_sales_book",
+                "app.services.tally_jobs.fetch_tally_sales_book",
                 return_value=[
                     TallySalesVoucher(
                         "2026-07-15",
@@ -132,22 +134,30 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                     "Gateway test queued. Waiting for the Tally request worker.",
                 ),
             ),
+            patch("app.services.tally_jobs.SessionLocal", Session),
+            patch("app.routers.tally_check.notify_retry_worker"),
         ):
-            live_companies = client.get(
+            companies_job = client.get(
                 f"/tally-check/companies/{company_id}/live/companies",
                 headers=session_headers,
             )
-            live_ledgers = client.get(
+            assert companies_job.status_code == 202
+            assert tally_jobs.process_pending_tally_data_job() == 1
+            live_companies = client.get(
+                companies_job.json()["status_url"],
+                headers=session_headers,
+            )
+            ledgers_job = client.get(
                 f"/tally-check/companies/{company_id}/live/ledgers",
                 params={"tally_company": "Live Company"},
                 headers=session_headers,
             )
-            live_locations = client.get(
+            locations_job = client.get(
                 f"/tally-check/companies/{company_id}/live/stock-locations",
                 params={"tally_company": "Live Company"},
                 headers=session_headers,
             )
-            live_sales = client.get(
+            sales_job = client.get(
                 f"/tally-check/companies/{company_id}/live/sales-book",
                 params={
                     "tally_company": "Live Company",
@@ -156,6 +166,11 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                 },
                 headers=session_headers,
             )
+            assert {ledgers_job.status_code, locations_job.status_code, sales_job.status_code} == {202}
+            assert [tally_jobs.process_pending_tally_data_job() for _ in range(3)] == [1, 1, 1]
+            live_ledgers = client.get(ledgers_job.json()["status_url"], headers=session_headers)
+            live_locations = client.get(locations_job.json()["status_url"], headers=session_headers)
+            live_sales = client.get(sales_job.json()["status_url"], headers=session_headers)
             cached_data = client.get(
                 f"/tally-check/companies/{company_id}/cached",
                 params={
@@ -299,8 +314,30 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
             ledger_ids=[customer_a.id],
             tally_user_values=[f"{assigned.id}:operator-a"],
         )
+        assigned_job = TallyDataJob(
+            request_key="assigned-ledger-job",
+            job_type="ledgers",
+            company_id=assigned.id,
+            requested_by_id=user.id,
+            status="succeeded",
+            payload_json=json.dumps({"tally_company": "Original Tally Company"}),
+            result_json="{}",
+        )
+        hidden_job = TallyDataJob(
+            request_key="hidden-ledger-job",
+            job_type="ledgers",
+            company_id=hidden.id,
+            requested_by_id=user.id,
+            status="succeeded",
+            payload_json=json.dumps({"tally_company": "Hidden Tally Company"}),
+            result_json="{}",
+        )
+        db.add_all([assigned_job, hidden_job])
+        db.commit()
         assigned_id = assigned.id
         hidden_id = hidden.id
+        assigned_job_id = assigned_job.id
+        hidden_job_id = hidden_job.id
 
     def override_get_db():
         db = Session()
@@ -341,6 +378,14 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
             },
             headers=session_headers,
         )
+        visible_job = client.get(
+            f"/tally-check/jobs/{assigned_job_id}",
+            headers=session_headers,
+        )
+        blocked_job = client.get(
+            f"/tally-check/jobs/{hidden_job_id}",
+            headers=session_headers,
+        )
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -353,3 +398,5 @@ def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
     assert [row["voucher_number"] for row in visible.json()["vouchers"]] == ["1"]
     assert blocked.status_code == 404
     assert wrong_tally_company.status_code == 403
+    assert [row["name"] for row in visible_job.json()["ledgers"]] == ["Customer A"]
+    assert blocked_job.status_code == 404

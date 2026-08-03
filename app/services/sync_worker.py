@@ -16,6 +16,7 @@ from app.database import SessionLocal
 from app.models import Batch, BatchItem, BatchStatus, Serial, Setting, utc_now
 from app.services.settings import enabled_tally_sync_batch_types, get_all_settings
 from app.services.tally import SYNC_LEASE_MINUTES, TALLY_XML_SUPPORTED_BATCH_TYPES, sync_batch
+from app.services.tally_jobs import process_pending_tally_data_job
 from app.services.tally_masters import GatewayCheckResult, test_tally_gateway
 
 
@@ -28,6 +29,7 @@ GATEWAY_CHECK_LEASE_SECONDS = 30
 logger = logging.getLogger("setuora")
 _worker_loop: asyncio.AbstractEventLoop | None = None
 _worker_wake_event: asyncio.Event | None = None
+_prefer_data_job = True
 
 
 @dataclass(frozen=True)
@@ -291,10 +293,22 @@ def retry_pending_batches(limit: int = 10) -> int:
 
 
 def process_next_tally_request() -> int:
-    """Process one queued gateway check or voucher through one consumer."""
+    """Process one gateway, live-data, or voucher request with fair ordering."""
+    global _prefer_data_job
     if process_pending_gateway_check():
         return 1
-    return retry_pending_batches(1)
+    if _prefer_data_job:
+        if process_pending_tally_data_job():
+            _prefer_data_job = False
+            return 1
+        return retry_pending_batches(1)
+    if retry_pending_batches(1):
+        _prefer_data_job = True
+        return 1
+    if process_pending_tally_data_job():
+        _prefer_data_job = False
+        return 1
+    return 0
 
 
 async def retry_worker_loop() -> None:

@@ -458,6 +458,17 @@
       return payload;
     }
 
+    async function fetchQueuedTallyPayload(url) {
+      let payload = await fetchPayload(url);
+      if (!payload.queued || !payload.status_url) return payload;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        payload = await fetchPayload(payload.status_url);
+        if (!payload.pending) return payload;
+      }
+      throw new Error("The Tally request is still queued. Refresh the page to check again.");
+    }
+
     document.querySelectorAll("[data-tally-live-browser]").forEach((browser) => {
       const companyId = browser.dataset.companyId;
       const currentCompany = browser.dataset.currentCompany || "";
@@ -594,9 +605,9 @@
             to_date: toInput.value
           });
           const payloads = await Promise.all([
-            fetchPayload(ledgerUrl),
-            fetchPayload(locationUrl),
-            fetchPayload(salesUrl)
+            fetchQueuedTallyPayload(ledgerUrl),
+            fetchQueuedTallyPayload(locationUrl),
+            fetchQueuedTallyPayload(salesUrl)
           ]);
           renderLedgers(payloads[0]);
           renderLocations(payloads[1]);
@@ -671,7 +682,7 @@
         connectButton.disabled = true;
         setStatus("Connecting to Tally...", false);
         try {
-          const payload = await fetchPayload(
+          const payload = await fetchQueuedTallyPayload(
             "/tally-check/companies/" + companyId + "/live/companies"
           );
           companySelect.replaceChildren();
