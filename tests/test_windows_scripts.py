@@ -341,13 +341,23 @@ def test_updater_restarts_the_optional_https_proxy_with_the_app_service():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert '$CaddyServiceName = "SetuoraCaddy"' in update_script
+    assert "Restart-Service -Name $CaddyServiceName -Force" in update_script
     assert "Start-Service -Name $CaddyServiceName" in update_script
     assert "sc.exe config $ServiceName start= auto" in update_script
     assert "sc.exe config $CaddyServiceName start= auto depend= $ServiceName" in update_script
     assert 'Wait-HealthEndpoint -Uri "https://$caddyAddress/health"' in update_script
-    assert update_script.index("Start-Service -Name $ServiceName") < update_script.index(
-        "Start-Service -Name $CaddyServiceName"
+    start_server_function = update_script.split("function Start-SetuoraServer", 1)[1].split(
+        "function Restore-PreviousVersion", 1
+    )[0]
+    assert start_server_function.index("Start-Service -Name $ServiceName") < start_server_function.index(
+        "$caddyRunning = Restart-CaddyProxy"
     )
+
+    current_block = update_script.split("if ($fetchedHead -eq $previousHead)", 1)[1].split(
+        "# Prefer a normal fast-forward", 1
+    )[0]
+    assert "Start-SetuoraServer | Out-Null" in current_block
+    assert update_script.count("$caddyRunning = Restart-CaddyProxy") == 2
 
 
 def test_target_server_preflight_is_available():

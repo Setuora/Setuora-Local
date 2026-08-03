@@ -102,6 +102,44 @@ function Wait-HealthEndpoint {
     throw "$DisplayName did not become reachable at '$Uri'. $lastError"
 }
 
+function Restart-CaddyProxy {
+    $caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+    if (-not $caddyService) {
+        return $false
+    }
+
+    if ($restartAsService) {
+        & sc.exe config $CaddyServiceName start= auto depend= $ServiceName | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not configure Caddy HTTPS for automatic startup after Setuora."
+        }
+    }
+    else {
+        & sc.exe config $CaddyServiceName start= auto | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not configure Caddy HTTPS for automatic startup."
+        }
+    }
+
+    if ($caddyService.Status -eq "Running") {
+        Write-Host "Restarting the Setuora Caddy HTTPS proxy..."
+        Restart-Service -Name $CaddyServiceName -Force
+    }
+    else {
+        Write-Host "Starting the Setuora Caddy HTTPS proxy..."
+        Start-Service -Name $CaddyServiceName
+    }
+
+    $caddyService = Get-Service -Name $CaddyServiceName
+    $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+    $caddyService.Refresh()
+    if ($caddyService.Status -ne "Running") {
+        throw "Caddy HTTPS did not remain running after the update. Run Setuora.exe repair."
+    }
+    Write-Host "Setuora Caddy HTTPS proxy restarted successfully." -ForegroundColor Green
+    return $true
+}
+
 function Start-SetuoraServer {
     if ($restartAsService) {
         & sc.exe config $ServiceName start= auto | Out-Null
@@ -118,32 +156,18 @@ function Start-SetuoraServer {
             throw "Setuora did not remain running after the update. Check logs\setuora-err.log."
         }
 
-        $caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
-        if ($caddyService) {
-            & sc.exe config $CaddyServiceName start= auto depend= $ServiceName | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Could not configure Caddy HTTPS for automatic startup after Setuora."
-            }
-            if ($caddyService.Status -ne "Running") {
-                Start-Service -Name $CaddyServiceName
-                $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
-            }
-            $caddyService.Refresh()
-            if ($caddyService.Status -ne "Running") {
-                throw "Caddy HTTPS did not remain running after the update. Run Setuora.exe repair."
-            }
-            Write-Host "Setuora and Caddy HTTPS are running as Windows services." -ForegroundColor Green
-        }
-        else {
-            Write-Host "Setuora is running, but Caddy HTTPS is not installed. Run Setuora.exe setup to enable phone and laptop access." -ForegroundColor Yellow
-        }
         Wait-HealthEndpoint -Uri "http://127.0.0.1:$Port/health" -DisplayName "Setuora local health check"
-        if ($caddyService) {
+        $caddyRunning = Restart-CaddyProxy
+        if ($caddyRunning) {
             $caddyAddress = Get-CaddyAddress
             if (-not $caddyAddress) {
                 throw "Caddy is running, but no HTTPS address could be read from '$Caddyfile'."
             }
             Wait-HealthEndpoint -Uri "https://$caddyAddress/health" -DisplayName "Setuora Caddy HTTPS"
+            Write-Host "Setuora and Caddy HTTPS are running as Windows services." -ForegroundColor Green
+        }
+        else {
+            Write-Host "Setuora is running, but Caddy HTTPS is not installed. Run Setuora.exe setup to enable phone and laptop access." -ForegroundColor Yellow
         }
         return $true
     }
@@ -151,8 +175,12 @@ function Start-SetuoraServer {
     if ($restartAsConsole) {
         Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")
         Wait-HealthEndpoint -Uri "http://127.0.0.1:$restartPort/health" -DisplayName "Setuora local health check"
-        $caddyAddress = Get-CaddyAddress
-        if ($caddyAddress) {
+        $caddyRunning = Restart-CaddyProxy
+        if ($caddyRunning) {
+            $caddyAddress = Get-CaddyAddress
+            if (-not $caddyAddress) {
+                throw "Caddy is running, but no HTTPS address could be read from '$Caddyfile'."
+            }
             Wait-HealthEndpoint -Uri "https://$caddyAddress/health" -DisplayName "Setuora Caddy HTTPS"
         }
         Write-Host "Setuora is running in a new window." -ForegroundColor Green
