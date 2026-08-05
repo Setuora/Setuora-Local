@@ -296,7 +296,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition("dashboard_data", "Dashboard data", "Counts, charts, recent scans and batches", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS),
                 AccessRowDefinition("product_master", "Product master", "View product list/search", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS, "Only users with Product action access can create products or generate serials."),
                 AccessRowDefinition("serial_data", "Serial data", "View serial list, details, scan history", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS),
-                AccessRowDefinition("label_files", "Label files", "Download serial XLSX or admin label PDF", _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES, Role.AUDITOR)), DATA_OPTIONS),
+                AccessRowDefinition("label_files", "Label files", "View/export labels; admin and purchase printing follows the QR print policy", _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES, Role.AUDITOR)), DATA_OPTIONS),
                 AccessRowDefinition("batch_list", "Batch list", "View all recent batches", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS, "Batch detail pages still follow batch-type permissions."),
                 AccessRowDefinition("purchase_data", "Purchase data", "Purchase and purchase-return batches", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.PURCHASE)), DATA_OPTIONS),
                 AccessRowDefinition("sales_data", "Sales data", "Sale and sales-return batches", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.SALES)), DATA_OPTIONS),

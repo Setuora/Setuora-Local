@@ -4,7 +4,7 @@ import sqlite3
 
 from sqlalchemy import Engine, inspect, text
 
-from app.database import engine
+from app.database import Base, engine
 
 
 def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
@@ -12,6 +12,11 @@ def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
     inspector = inspect(target)
     if "batches" not in inspector.get_table_names():
         return
+    # These additive tables are safe to create for existing installations and
+    # keep label history separate from the legacy one-time marker on serials.
+    Base.metadata.tables["label_templates"].create(target, checkfirst=True)
+    Base.metadata.tables["label_print_logs"].create(target, checkfirst=True)
+    inspector = inspect(target)
     with target.begin() as connection:
         columns = {column["name"] for column in inspector.get_columns("batches")}
         if "retry_count" not in columns:

@@ -78,6 +78,19 @@ def test_runtime_schema_adds_product_alias_columns(tmp_path):
     assert {"nickname", "alternate_tally_stock_item_name", "purchase_qr_print_allowed"} <= columns
 
 
+def test_runtime_schema_adds_label_template_and_print_history_tables(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-labels.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE batches (id INTEGER PRIMARY KEY)"))
+
+    ensure_runtime_schema(engine)
+
+    tables = set(inspect(engine).get_table_names())
+    assert {"label_templates", "label_print_logs"} <= tables
+    log_columns = {column["name"] for column in inspect(engine).get_columns("label_print_logs")}
+    assert {"serial_id", "printed_by_id", "printed_at", "copies", "is_reprint", "reason", "layout_json"} <= log_columns
+
+
 def test_runtime_schema_adds_tally_user_to_cached_sales_vouchers(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'legacy-tally-cache.db'}")
     with engine.begin() as connection:

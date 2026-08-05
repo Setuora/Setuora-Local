@@ -271,6 +271,55 @@ class Serial(Base):
         return self.status
 
 
+class LabelTemplate(Base):
+    __tablename__ = "label_templates"
+    __table_args__ = (
+        UniqueConstraint("created_by_id", "name", name="uq_label_template_owner_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    settings_json: Mapped[str] = mapped_column(Text)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    created_by: Mapped[User] = relationship()
+
+    @property
+    def settings(self) -> dict:
+        try:
+            value = json.loads(self.settings_json)
+        except (TypeError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+
+class LabelPrintLog(Base):
+    __tablename__ = "label_print_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    serial_id: Mapped[int] = mapped_column(ForeignKey("serials.id"), index=True)
+    printed_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    printed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    copies: Mapped[int] = mapped_column(Integer, default=1)
+    is_reprint: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    template_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    layout_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    serial: Mapped[Serial] = relationship()
+    printed_by: Mapped[User] = relationship()
+
+    @property
+    def layout(self) -> dict:
+        try:
+            value = json.loads(self.layout_json or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+
 class StockRelocation(Base):
     __tablename__ = "stock_relocations"
 

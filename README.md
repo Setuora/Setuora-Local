@@ -6,7 +6,7 @@ Setuora is a LAN-first barcode transaction bridge for Tally Prime. It lets staff
 
 - Role-based login for admin, purchase, sales, and audit users
 - Product master with HSN, GST, unit, default rate, sales discount, and exact Tally stock item name
-- Bulk serial generation and printable/PDF QR labels with the serial number only
+- Bulk serial generation and calibrated QR label printing with slot preview, saved printer templates, test sheets, and audited reprints
 - Product batch, manufacturing date, expiry date, and warehouse tracking for assigned stock
 - Purchase, sale, audit, sales return, purchase return, stock issue, barcode assignment, and barcode replacement workflows
 - Batch pricing, GST split, round off, and voucher preview before submit

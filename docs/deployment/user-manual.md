@@ -58,7 +58,11 @@ Settings fields auto-save while editing. The purchase and sales sync checkboxes 
 7. Add product batch and expiry details when they are known.
 8. Open the generated assignment batch to download labels PDF or serial XLSX.
 
-Labels contain only a QR code and serial text. They do not include price, GST, customer, or product data. The default print/PDF layout is for 48.5 mm x 25.4 mm labels, 4 columns by 11 rows on A4.
+Labels contain only a QR code and serial text. They do not include price, GST, customer, or product data. The default layout is for 48.5 mm x 25.4 mm labels, 4 columns by 11 rows on A4.
+
+Before printing, use `Label sheet setup` to set page size/orientation, margins, label size, row/column spacing, rows, columns, scale, and the first unused slot. The on-screen preview uses the same layout as printing. Use `Test print` to print slot outlines without QR codes, then hold the test page against the label sheet and adjust the margins or spacing if needed. In the browser print dialog, always choose `100%` or `Actual size` and disable headers and footers.
+
+Save a named template for each printer and sheet type, for example `A4 – 40 Labels`. Templates are saved per user. Purchase users can print each QR only once. Their print button is disabled afterward, and an admin must perform any reprint. Admin and super-admin users may print multiple copies or reprint an existing QR, but a reason is mandatory. Setuora records the user, date and time, copy count, template/layout, and reprint reason in the label print history.
 
 ## Barcode Assignment
 

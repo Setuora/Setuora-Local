@@ -10,9 +10,12 @@
   <div class="actions">
     <a class="button" href="/serials/labels.xlsx?ids={{ label_ids }}" data-xlsx-export data-xlsx-title="Customize barcode export" data-xlsx-fields="{{ serial_excel_fields }}">Download Excel</a>
     {% if can_manage_labels %}
+    <button class="button" type="button" data-test-print>Test print</button>
+    {% if is_label_admin %}
     {% set label_pdf_action = '/serials/labels.pdf' %}
     {% set label_pdf_ids = label_ids %}
     <a class="button" href="/serials/labels.pdf?ids={{ label_ids }}" data-label-pdf-open>Download PDF</a>
+    {% endif %}
     <button
       class="button primary"
       type="button"
@@ -20,43 +23,159 @@
       data-print-url="/serials/labels/print"
       data-print-ids="{{ label_ids }}"
       {% if not can_print %}disabled{% endif %}
-    >{{ 'Print used' if printed_serials else 'Choose printer & print' }}</button>
+    >{% if is_label_admin and printed_serials %}Admin reprint{% elif printed_serials %}Print used{% else %}Choose printer &amp; print{% endif %}</button>
     {% endif %}
   </div>
 </section>
 
 {% if not can_manage_labels %}
-<div class="alert warn print-hide">This role can download label Excel, but cannot print labels or download label PDF.</div>
+<div class="alert warn print-hide">This role can download label Excel, but only admin and purchase users can print labels.</div>
+{% endif %}
+{% if can_manage_labels and not serials %}
+<div class="alert warn print-hide">No QR labels are selected, so you cannot print labels.</div>
 {% endif %}
 {% if printed_serials %}
-<div class="alert warn print-hide">Print option already used for {{ printed_serials|length }} selected label{{ '' if printed_serials|length == 1 else 's' }}.</div>
+<div class="alert warn print-hide">
+  {{ printed_serials|length }} selected label{{ '' if printed_serials|length == 1 else 's' }} already {{ 'has' if printed_serials|length == 1 else 'have' }} print history.
+  {% if is_label_admin %}Enter a reason below to reprint.{% else %}Only an admin can approve or perform a reprint.{% endif %}
+</div>
 {% endif %}
 
 {% if can_manage_labels %}
-<section class="panel label-controls print-hide" data-label-dimensions>
-  <h2>Print dimensions</h2>
-  <div class="grid-form compact">
-    <label>Label width mm<input type="number" min="20" max="120" step="0.1" value="48.5" data-print-var="--print-label-width"></label>
-    <label>Label height mm<input type="number" min="12" max="80" step="0.1" value="25.4" data-print-var="--print-label-height"></label>
-    <label>QR size mm<input type="number" min="10" max="24" step="0.1" value="19.5" data-print-var="--print-qr-size"></label>
+<section
+  class="panel label-controls print-hide"
+  data-label-editor
+  data-default-layout="{{ default_label_layout|tojson|forceescape }}"
+  data-saved-templates="{{ saved_label_templates|tojson|forceescape }}"
+  data-template-url="/serials/labels/templates"
+  data-is-admin="{{ 'true' if is_label_admin else 'false' }}"
+>
+  <div class="label-editor-head">
+    <div>
+      <h2>Label sheet setup</h2>
+      <p class="muted">Measurements are in millimetres. Use 100% / Actual size in the printer dialog and turn off headers and footers.</p>
+    </div>
+    <div class="template-actions">
+      <label>Saved template
+        <select data-template-select>
+          <option value="">Custom settings</option>
+          {% for template in saved_label_templates %}<option value="{{ template.id }}">{{ template.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="button" type="button" data-template-delete disabled>Delete</button>
+    </div>
   </div>
-  <p class="muted" data-print-status></p>
+
+  <div class="label-settings-grid">
+    <fieldset>
+      <legend>Page</legend>
+      <div class="grid-form compact">
+        <label>Page size
+          <select data-layout-field="page_size">
+            <option value="A4">A4</option><option value="Letter">Letter</option><option value="Custom">Custom</option>
+          </select>
+        </label>
+        <label>Orientation
+          <select data-layout-field="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+        </label>
+        <label>Scale %<input type="number" min="50" max="150" step="1" data-layout-field="scale_percent"></label>
+        <label>Page width<input type="number" min="50" max="500" step="0.1" data-layout-field="page_width_mm"></label>
+        <label>Page height<input type="number" min="50" max="500" step="0.1" data-layout-field="page_height_mm"></label>
+        <label>Printer name <input type="text" maxlength="120" placeholder="Optional reminder" data-layout-field="printer_name"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Margins</legend>
+      <div class="grid-form compact">
+        <label>Top<input type="number" min="0" max="100" step="0.1" data-layout-field="margin_top_mm"></label>
+        <label>Bottom<input type="number" min="0" max="100" step="0.1" data-layout-field="margin_bottom_mm"></label>
+        <label>Left<input type="number" min="0" max="100" step="0.1" data-layout-field="margin_left_mm"></label>
+        <label>Right<input type="number" min="0" max="100" step="0.1" data-layout-field="margin_right_mm"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Labels</legend>
+      <div class="grid-form compact">
+        <label>Width<input type="number" min="10" max="200" step="0.1" data-layout-field="label_width_mm"></label>
+        <label>Height<input type="number" min="10" max="200" step="0.1" data-layout-field="label_height_mm"></label>
+        <label>QR size<input type="number" min="5" max="100" step="0.1" data-layout-field="qr_size_mm"></label>
+        <label>Horizontal spacing<input type="number" min="0" max="50" step="0.1" data-layout-field="horizontal_spacing_mm"></label>
+        <label>Vertical spacing<input type="number" min="0" max="50" step="0.1" data-layout-field="vertical_spacing_mm"></label>
+        <label>Rows<input type="number" min="1" max="30" step="1" data-layout-field="rows"></label>
+        <label>Columns<input type="number" min="1" max="12" step="1" data-layout-field="columns"></label>
+        <label>Starting label<input type="number" min="1" step="1" data-layout-field="start_position"></label>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="start-position-block">
+    <strong>Choose first empty slot</strong>
+    <div class="start-slot-picker" data-start-slot-picker></div>
+  </div>
+
+  <div class="template-save-row">
+    <label>Template name <input type="text" maxlength="120" placeholder="A4 – 40 Labels" data-template-name></label>
+    <button class="button" type="button" data-template-save>Save template</button>
+  </div>
+
+  <div class="print-options">
+    <label>Copies
+      <input type="number" min="1" max="{{ 100 if is_label_admin else 1 }}" step="1" value="1" data-print-copies {{ 'disabled' if not is_label_admin else '' }}>
+    </label>
+    {% if is_label_admin %}
+    <label class="print-reason">Reprint reason
+      <input type="text" maxlength="500" placeholder="Required for a reprint or multiple copies" data-print-reason>
+    </label>
+    {% endif %}
+  </div>
+  <p class="muted" data-layout-summary></p>
+  <p class="muted" role="status" data-print-status></p>
 </section>
 {% endif %}
 
-<section class="label-sheet">
+<section class="label-preview-shell">
+  <div class="label-preview-head print-hide">
+    <div><h2>Print preview</h2><p class="muted">Dashed boxes represent the pre-cut label slots and are not printed.</p></div>
+    <span class="status" data-preview-page-count></span>
+  </div>
+  <div class="label-preview" data-label-preview></div>
+</section>
+
+<div class="label-source" data-label-source hidden>
   {% for serial in serials %}
-  <div class="barcode-label">
+  <div class="barcode-label" data-serial-id="{{ serial.id }}">
     <img src="/serials/{{ serial.id }}/barcode.png" alt="{{ serial.serial_number }}">
     <strong>{{ serial.serial_number }}</strong>
   </div>
-  {% else %}
-  <div class="empty">No labels selected</div>
   {% endfor %}
-</section>
-{% if can_manage_labels %}
+</div>
+
+{% if is_label_admin %}
 {% include "partials/label_pdf_dialog.html" %}
 <script src="/static/label-pdf-dialog.js"></script>
+{% endif %}
+
+{% if print_logs %}
+<section class="panel print-history print-hide">
+  <h2>Print history</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>QR label</th><th>Printed by</th><th>Date and time</th><th>Copies</th><th>Type</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for log in print_logs %}
+        <tr>
+          <td>{{ log.serial.serial_number }}</td>
+          <td>{{ log.printed_by.username }}</td>
+          <td>{{ log.printed_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ log.copies }}</td>
+          <td>{{ 'Reprint' if log.is_reprint else 'First print' }}</td>
+          <td>{{ log.reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endif %}
 <script src="/static/label-print.js"></script>
 {% endblock %}
