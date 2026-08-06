@@ -149,6 +149,21 @@ def test_label_layout_validation_rejects_sheet_overflow_and_bad_start():
     else:
         assert False
 
+
+def test_invalid_copy_value_is_rejected_by_print_service(db_session):
+    user = User(username="admin", password_hash="x", role="admin")
+    product = _product()
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+
+    try:
+        record_serial_label_prints(db_session, user, [serial.id], copies=0)
+    except LabelPrintError as exc:
+        assert "Copies must be" in str(exc)
+    else:
+        assert False
+
     try:
         validate_label_layout({**DEFAULT_LABEL_LAYOUT, "start_position": 45})
     except LabelPrintError as exc:

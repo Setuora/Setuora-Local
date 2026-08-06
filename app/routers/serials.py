@@ -136,6 +136,9 @@ async def mark_labels_printed(request: Request, db: Session = Depends(get_db)):
     raw_copies = payload.get("copies", 1)
     try:
         copies = int(raw_copies) if not isinstance(raw_copies, bool) else 0
+    except (TypeError, ValueError):
+        copies = 0
+    try:
         logs = record_serial_label_prints(
             db,
             user,
