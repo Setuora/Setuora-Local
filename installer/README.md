@@ -1,7 +1,11 @@
 # Setuora Windows Installer
 
 `Setuora.exe` is the single Windows control executable for a Windows 11 server.
-It provides setup, repair, update, start, and stop commands. Setup requests administrator
+Double-click it for the controls menu: **Start**, **Stop**, and **Uninstall**.
+Start installs, updates or runs Setuora and opens the browser; Stop keeps it
+stopped after a restart; Uninstall keeps a verified recovery copy of settings
+and data before removing it. The setup, repair, and update commands remain
+available for maintenance. Setup requests administrator
 access, installs Git for Windows when needed, clones or updates the official
 Setuora repository, and launches the complete `scripts\setup.bat` workflow.
 
@@ -35,13 +39,18 @@ Windows SmartScreen may therefore ask the operator to confirm that it should run
 ## Options
 
 ```text
+Setuora.exe start
+Setuora.exe stop
+Setuora.exe uninstall
 Setuora.exe setup --install-dir C:\Setuora --branch main
 Setuora.exe setup --with-caddy=false
 Setuora.exe repair
 Setuora.exe update
-Setuora.exe start
-Setuora.exe stop
 ```
+
+Start moves a running `Setuora.exe` aside as `Setuora.exe.*.old` when an update
+replaces it, because Windows cannot overwrite a running program. The next
+update removes those files.
 
 Updates refuse uncommitted source changes. If a clean installed checkout has
 diverged from official release history, its prior commit is preserved on a

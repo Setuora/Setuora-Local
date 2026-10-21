@@ -196,12 +196,92 @@ def test_start_script_uses_state_aware_windows_helper():
     )
 
 
-def test_unified_start_and_stop_request_administrator_access():
+def test_every_control_action_requests_administrator_access():
     installer_source = (PROJECT_ROOT / "installer" / "main.go").read_text(encoding="utf-8")
 
-    elevation_condition = installer_source.split('if options.command == "setup"', 1)[1].split("{", 1)[0]
-    assert 'options.command == "start"' in elevation_condition
-    assert 'options.command == "stop"' in elevation_condition
+    run_action = installer_source.split("func runAction(", 1)[1].split("\nfunc ", 1)[0]
+    assert run_action.index("if !isAdministrator()") < run_action.index("switch options.command")
+    assert "relaunchElevated(options)" in run_action
+    # The browser opens on the original user's desktop after an elevated Start.
+    elevated = run_action.split("if !isAdministrator()", 1)[1].split("switch options.command", 1)[0]
+    assert 'if options.command == "start"' in elevated
+    assert "openBrowser(browserURL(options))" in elevated
+
+
+def test_control_menu_matches_start_stop_uninstall_reference():
+    installer_source = (PROJECT_ROOT / "installer" / "main.go").read_text(encoding="utf-8")
+
+    menu = installer_source.split("func runMenu(", 1)[1].split("\nfunc ", 1)[0]
+    assert '"[1] Start"' in menu
+    assert '"[2] Stop"' in menu
+    assert '"[3] Uninstall (keeps a recovery backup)"' in menu
+    assert '"Choose (close this window to exit): "' in menu
+    assert 'if err == nil && command == "uninstall"' in menu
+    assert '"Press Enter to return to the menu"' in menu
+    start = installer_source.split("func startSetuora(", 1)[1].split("\nfunc ", 1)[0]
+    assert "return runInstaller(options)" in start
+    assert '"--no-pause", "-Start"' in start
+
+
+def test_stop_keeps_setuora_stopped_until_start():
+    stop_helper = (PROJECT_ROOT / "deployment" / "windows" / "stop_setuora.ps1").read_text(
+        encoding="utf-8"
+    )
+    stop_script = (WORKFLOWS_DIR / "stop_setuora.bat").read_text(encoding="utf-8")
+    start_helper = (PROJECT_ROOT / "deployment" / "windows" / "start_setuora.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[switch]$DisableAutostart" in stop_helper
+    assert "sc.exe config $name start= disabled" in stop_helper
+    assert stop_helper.index("start= disabled") < stop_helper.index("Stop-Service -Name $ServiceName")
+    assert '-ProjectDir "%PROJECT_DIR%" -DisableAutostart' in stop_script
+    assert "sc.exe config $ServiceName start= auto" in start_helper
+
+
+def test_start_mode_runs_current_version_when_update_cannot_apply():
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
+    powershell = update_script.split("### POWERSHELL UPDATE SCRIPT ###", 1)[1]
+
+    assert "[switch]$Start" in powershell
+    dirty = powershell.split("if ($worktreeChanges.Count -gt 0)", 1)[1].split("# Remember", 1)[0]
+    assert dirty.index("if ($Start)") < dirty.index("throw")
+    assert "Start-CurrentVersion" in dirty
+    fetch = powershell.split("& git fetch --no-tags origin $branch", 1)[1].split("$fetchedHead", 1)[0]
+    assert "Start-CurrentVersion" in fetch
+    assert '$env:GIT_TERMINAL_PROMPT = "0"' in powershell
+    assert powershell.index("Unlock-ControlExecutable -TargetCommit $fetchedHead") < powershell.index(
+        "& git merge --ff-only FETCH_HEAD"
+    )
+    unlock = powershell.split("function Unlock-ControlExecutable", 1)[1].split("\nfunction ", 1)[0]
+    assert unlock.index("Move-Item -LiteralPath $launcher") < unlock.index("& git checkout -- Setuora.exe")
+    assert "Setuora.exe.*.old" in (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_uninstall_keeps_verified_recovery_before_removing_anything():
+    uninstall = (PROJECT_ROOT / "deployment" / "windows" / "uninstall_setuora.ps1").read_text(
+        encoding="utf-8"
+    )
+    finisher = (PROJECT_ROOT / "deployment" / "windows" / "finish_uninstall.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    for path in ('".env"', '"data"', '"logs"', '"deployment\\caddy\\state"'):
+        assert path in uninstall
+    assert 'Read-Host "Type REMOVE Local to continue"' in uninstall
+    assert "Get-FileHash" in uninstall
+    assert 'Join-Path $env:ProgramData "Setuora\\Recovery"' in uninstall
+    assert uninstall.index("-DisableAutostart") < uninstall.index("Copy-VerifiedRecovery -Relative")
+    assert uninstall.index("Copy-VerifiedRecovery -Relative") < uninstall.index(
+        "Remove-ServiceIfPresent $ServiceName\n"
+    )
+    assert uninstall.index("Remove-ServiceIfPresent $ServiceName\n") < uninstall.index(
+        "Start-Process -FilePath \"powershell.exe\""
+    )
+    assert "Remove-NetFirewallRule" in uninstall
+    assert 'Cert:\\LocalMachine\\Root' in uninstall
+    assert 'Test-Path -LiteralPath (Join-Path $target "app\\main.py")' in finisher
+    assert "ReparsePoint" in finisher and "ReparsePoint" in uninstall
 
 
 def test_start_helper_repairs_missing_dependencies_before_launch():

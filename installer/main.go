@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -51,11 +52,8 @@ func main() {
 	}
 
 	if options.command == "" {
-		options.interactive = true
-		options.command, err = chooseCommand()
-		if err != nil {
-			fail(err)
-		}
+		runMenu(options)
+		return
 	}
 
 	if options.command == "help" {
@@ -63,26 +61,159 @@ func main() {
 		return
 	}
 
-	if options.command == "setup" || options.command == "repair" || options.command == "update" || options.command == "start" || options.command == "stop" {
-		if !isAdministrator() {
-			if options.elevated {
-				fail(fmt.Errorf("administrator access is required for %s", options.command))
-			}
-			if err := relaunchElevated(options); err != nil {
-				fail(fmt.Errorf("the elevated %s command did not complete: %w", options.command, err))
-			}
+	if err := runAction(options); err != nil {
+		fail(err)
+	}
+	// The update hand-off keeps running in this window after the launcher exits.
+	if options.elevated && options.command != "update" {
+		// Keep the Administrator window open so its messages can be read.
+		fmt.Print("\nPress Enter to close this Administrator window...")
+		_, _ = fmt.Fscanln(os.Stdin)
+	}
+}
+
+func runMenu(options installerOptions) {
+	options.interactive = true
+	input := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Println()
+		fmt.Println("Setuora QR Tally Bridge controls")
+		fmt.Println(options.installDir)
+		fmt.Println("[1] Start")
+		fmt.Println("[2] Stop")
+		fmt.Println("[3] Uninstall (keeps a recovery backup)")
+		fmt.Print("Choose (close this window to exit): ")
+		choice, err := input.ReadString('\n')
+		if err != nil && choice == "" {
 			return
 		}
-		if options.command == "setup" {
-			if err := runInstaller(options); err != nil {
-				fail(err)
-			}
+		command := menuCommand(choice)
+		if command == "" {
+			fmt.Println("Choose a listed number.")
+			continue
+		}
+		options.command = command
+		err = runAction(options)
+		if err == nil && command == "uninstall" {
 			return
 		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\nSetuora %s failed: %v\n", command, err)
+		}
+		fmt.Print("Press Enter to return to the menu")
+		_, _ = input.ReadString('\n')
+	}
+}
+
+func menuCommand(choice string) string {
+	switch strings.TrimSpace(choice) {
+	case "1":
+		return "start"
+	case "2":
+		return "stop"
+	case "3":
+		return "uninstall"
+	default:
+		return ""
+	}
+}
+
+func runAction(options installerOptions) error {
+	if !isAdministrator() {
+		if options.elevated {
+			return fmt.Errorf("administrator access is required for %s", options.command)
+		}
+		fmt.Println("Approve the Windows Administrator prompt. The selected action continues in the new window.")
+		if err := relaunchElevated(options); err != nil {
+			return fmt.Errorf("the elevated %s command did not complete: %w", options.command, err)
+		}
+		// Open the browser on the original user's desktop, not as Administrator.
+		if options.command == "start" {
+			openBrowser(browserURL(options))
+		}
+		return nil
 	}
 
-	if err := runProjectCommand(options); err != nil {
-		fail(err)
+	switch options.command {
+	case "setup":
+		return runInstaller(options)
+	case "start":
+		if err := startSetuora(options); err != nil {
+			return err
+		}
+		if !options.elevated {
+			openBrowser(browserURL(options))
+		}
+		return nil
+	case "uninstall":
+		return runUninstall(options)
+	default:
+		return runProjectCommand(options)
+	}
+}
+
+// startSetuora installs Setuora or finishes an interrupted installation, and
+// otherwise updates a clean checkout when GitHub is reachable before running
+// and verifying the installed version.
+func startSetuora(options installerOptions) error {
+	if !fileExists(filepath.Join(options.installDir, ".git")) ||
+		!fileExists(filepath.Join(options.installDir, ".venv", "Scripts", "python.exe")) {
+		return runInstaller(options)
+	}
+	workflow := filepath.Join("scripts", "update.bat")
+	content, err := os.ReadFile(filepath.Join(options.installDir, workflow))
+	if err != nil || !strings.Contains(string(content), "[switch]$Start") {
+		// A checkout older than this launcher is brought up to date by setup.
+		return runInstaller(options)
+	}
+	return runVisibleInDir(options.installDir, "cmd.exe", "/d", "/c", workflow, "--no-pause", "-Start", "-Port", fmt.Sprint(options.port))
+}
+
+func runUninstall(options installerOptions) error {
+	script := filepath.Join(options.installDir, "deployment", "windows", "uninstall_setuora.ps1")
+	if !fileExists(script) {
+		return fmt.Errorf("%s was not found; choose Start to update this installation, then retry", script)
+	}
+	// Run outside the installation so the removal is not blocked by this
+	// helper's working directory.
+	workingDirectory := os.Getenv("ProgramData")
+	if workingDirectory == "" {
+		workingDirectory = os.TempDir()
+	}
+	return runVisibleInDir(workingDirectory, "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-ProjectDir", options.installDir)
+}
+
+func browserURL(options installerOptions) string {
+	if address := caddyAddress(filepath.Join(options.installDir, "deployment", "caddy", "Caddyfile")); address != "" {
+		return "https://" + address
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d", options.port)
+}
+
+func caddyAddress(caddyfile string) string {
+	content, err := os.ReadFile(caddyfile)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "https://") {
+			continue
+		}
+		address := strings.TrimPrefix(line, "https://")
+		if end := strings.IndexAny(address, " \t{"); end >= 0 {
+			address = address[:end]
+		}
+		if address != "" {
+			return address
+		}
+	}
+	return ""
+}
+
+func openBrowser(url string) {
+	if err := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start(); err != nil {
+		fmt.Printf("Open %s in your browser.\n", url)
 	}
 }
 
@@ -112,7 +243,7 @@ func parseOptions(arguments []string) (installerOptions, error) {
 		// Preserve the previous installer behavior for invocations that only use flags.
 		options.command = "setup"
 	}
-	if options.command != "" && options.command != "setup" && options.command != "repair" && options.command != "start" && options.command != "stop" && options.command != "update" && options.command != "help" {
+	if options.command != "" && options.command != "setup" && options.command != "repair" && options.command != "start" && options.command != "stop" && options.command != "update" && options.command != "uninstall" && options.command != "help" {
 		return options, fmt.Errorf("unknown command: %s", options.command)
 	}
 
@@ -441,7 +572,6 @@ func runSetup(options installerOptions, repair bool) error {
 func runProjectCommand(options installerOptions) error {
 	workflowName := map[string]string{
 		"repair": "setup.bat",
-		"start":  "start_setuora.bat",
 		"stop":   "stop_setuora.bat",
 		"update": "update.bat",
 	}[options.command]
@@ -457,7 +587,7 @@ func runProjectCommand(options installerOptions) error {
 	if options.command == "repair" {
 		arguments = append(arguments, "-Repair", "-SkipStart", "-SkipCaddy")
 	}
-	if options.command == "start" || options.command == "update" || options.command == "repair" {
+	if options.command == "update" || options.command == "repair" {
 		arguments = append(arguments, "-Port", fmt.Sprint(options.port))
 	}
 	if options.command == "update" {
@@ -479,43 +609,17 @@ func runProjectCommand(options installerOptions) error {
 	return runVisibleInDir(options.installDir, "cmd.exe", arguments...)
 }
 
-func chooseCommand() (string, error) {
-	fmt.Println("Setuora QR Tally Bridge")
-	fmt.Println("1. Install or finish setup")
-	fmt.Println("2. Repair this installation (keeps data and settings)")
-	fmt.Println("3. Update to the latest version")
-	fmt.Println("4. Start")
-	fmt.Println("5. Stop")
-	fmt.Print("Choose an action: ")
-
-	var choice string
-	if _, err := fmt.Fscanln(os.Stdin, &choice); err != nil {
-		return "", fmt.Errorf("read action: %w", err)
-	}
-	switch strings.TrimSpace(choice) {
-	case "1", "setup":
-		return "setup", nil
-	case "2", "repair":
-		return "repair", nil
-	case "3", "update":
-		return "update", nil
-	case "4", "start":
-		return "start", nil
-	case "5", "stop":
-		return "stop", nil
-	default:
-		return "", fmt.Errorf("%q is not a valid action", choice)
-	}
-}
-
 func printUsage() {
-	fmt.Println("Usage: Setuora.exe <setup|repair|update|start|stop> [options]")
-	fmt.Println("  setup  Installs Setuora or safely updates an existing clean installation.")
-	fmt.Println("         Configures Caddy HTTPS and Windows autostart by default; use --with-caddy=false to opt out.")
-	fmt.Println("  repair Repairs Python, packages, services, and app startup without changing data, settings, or source files.")
-	fmt.Println("  update Downloads a verified update, tests it, and restores the prior runtime state.")
-	fmt.Println("  start  Starts Setuora and the optional HTTPS proxy.")
-	fmt.Println("  stop   Stops Setuora and the optional HTTPS proxy.")
+	fmt.Println("Usage: Setuora.exe [start|stop|uninstall|setup|repair|update] [options]")
+	fmt.Println("  (none)    Opens the controls menu: Start, Stop, Uninstall.")
+	fmt.Println("  start     Installs Setuora, or updates a clean installation when GitHub is reachable,")
+	fmt.Println("            then runs and verifies it and opens the browser. Configures Caddy HTTPS and")
+	fmt.Println("            Windows autostart on a new installation; use --with-caddy=false to opt out.")
+	fmt.Println("  stop      Stops Setuora and the HTTPS proxy and keeps them stopped after a restart.")
+	fmt.Println("  uninstall Keeps a verified recovery copy of settings and data, then removes Setuora.")
+	fmt.Println("  setup     Installs Setuora or safely updates an existing clean installation.")
+	fmt.Println("  repair    Repairs Python, packages, services, and app startup without changing data, settings, or source files.")
+	fmt.Println("  update    Downloads a verified update, tests it, and restores the prior runtime state.")
 }
 
 func runVisibleInDir(directory, name string, arguments ...string) error {

@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$ProjectDir,
     [string]$ServiceName = "SetuoraQrTallyBridge",
-    [string]$CaddyServiceName = "SetuoraCaddy"
+    [string]$CaddyServiceName = "SetuoraCaddy",
+    [switch]$DisableAutostart
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +18,19 @@ if (-not (Test-Path -LiteralPath $processHelper)) {
     throw "The Setuora process helper was not found: '$processHelper'."
 }
 . $processHelper
+
+if ($DisableAutostart) {
+    # Disable first so service recovery cannot restart Setuora during Stop, and a
+    # stopped Setuora stays stopped after Windows restarts. Start re-enables it.
+    foreach ($name in @($ServiceName, $CaddyServiceName)) {
+        if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            & sc.exe config $name start= disabled | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Windows could not disable automatic startup for '$name'. Run this command as Administrator."
+            }
+        }
+    }
+}
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($service -and $service.Status -ne "Stopped") {
@@ -71,4 +85,7 @@ if ($caddyService -and $caddyService.Status -ne "Stopped") {
 
 if (-not $stoppedAnything) {
     Write-Host "No existing Setuora server process was found."
+}
+if ($DisableAutostart) {
+    Write-Host "Setuora stays stopped, even after Windows restarts, until you choose Start. Data and settings were kept."
 }

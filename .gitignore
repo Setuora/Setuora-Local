@@ -25,3 +25,5 @@ deployment/caddy/Caddyfile
 deployment/caddy/setuora-caddy-root.crt
 deployment/caddy/state/
 deployment/windows/nssm.exe
+# Control launchers moved aside while Start updated them.
+Setuora.exe.*.old

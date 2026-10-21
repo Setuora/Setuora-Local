@@ -17,7 +17,9 @@ exit /b %UPDATE_EXIT%
 
 ### POWERSHELL UPDATE SCRIPT ###
 param(
-    [int]$Port = 8000
+    [int]$Port = 8000,
+    # Start mode runs the installed version when an update cannot be applied.
+    [switch]$Start
 )
 
 $ErrorActionPreference = "Stop"
@@ -190,6 +192,38 @@ function Start-SetuoraServer {
     throw "Setuora could not be restarted after the update."
 }
 
+function Start-CurrentVersion {
+    param([string]$Reason)
+
+    Write-Host "$Reason Starting the installed version without updating it." -ForegroundColor Yellow
+    Write-Section "Ensure Services Are Running"
+    Start-SetuoraServer | Out-Null
+    Write-Host "Setuora and its available HTTPS services are running." -ForegroundColor Green
+}
+
+function Unlock-ControlExecutable {
+    param([string]$TargetCommit)
+
+    # The control menu keeps Setuora.exe open while this update runs. Windows
+    # cannot overwrite a running program but can rename it, so move it aside and
+    # restore an unlocked copy for Git to replace.
+    $launcher = Join-Path $ProjectRoot "Setuora.exe"
+    if (-not (Test-Path -LiteralPath $launcher)) {
+        return
+    }
+    & git diff --quiet $previousHead $TargetCommit -- Setuora.exe
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+    $aside = "$launcher.$(Get-Date -Format 'yyyyMMddHHmmssfff').old"
+    Move-Item -LiteralPath $launcher -Destination $aside
+    & git checkout -- Setuora.exe
+    if ($LASTEXITCODE -ne 0) {
+        Move-Item -LiteralPath $aside -Destination $launcher -Force
+        throw "Setuora.exe could not be prepared for the update. Your existing files were left unchanged."
+    }
+}
+
 function Restore-PreviousVersion {
     if (-not $updateStarted) {
         return
@@ -203,6 +237,10 @@ function Restore-PreviousVersion {
 }
 
 Set-Location $ProjectRoot
+
+# Launchers moved aside by an earlier update are unlocked once their windows close.
+Get-ChildItem -LiteralPath $ProjectRoot -Filter "Setuora.exe.*.old" -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
 
 if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
     throw "Git was not found. Install Git for Windows, then run scripts\update.bat again."
@@ -262,6 +300,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "Git could not inspect the working tree. Your installation was left unchanged."
 }
 if ($worktreeChanges.Count -gt 0) {
+    if ($Start) {
+        Start-CurrentVersion -Reason "Local source changes are present, so they were not overwritten."
+        return
+    }
     throw "Refusing to update because local source changes are present. Commit or stash them first; scripts\update.bat never overwrites local code."
 }
 
@@ -273,8 +315,13 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($previousHead)) {
 
 Write-Section "Download Latest Version"
 Write-Host "Updating branch '$branch' from origin..."
+$env:GIT_TERMINAL_PROMPT = "0"
 & git fetch --no-tags origin $branch
 if ($LASTEXITCODE -ne 0) {
+    if ($Start) {
+        Start-CurrentVersion -Reason "GitHub could not be reached to check for updates."
+        return
+    }
     throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run scripts\update.bat again."
 }
 
@@ -289,6 +336,8 @@ if ($fetchedHead -eq $previousHead) {
     Write-Host "Setuora and its available HTTPS services are running." -ForegroundColor Green
     return
 }
+
+Unlock-ControlExecutable -TargetCommit $fetchedHead
 
 # Prefer a normal fast-forward. If release history was rewritten, preserve the
 # clean installed commit on a backup branch before realigning source to the

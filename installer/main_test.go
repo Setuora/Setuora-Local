@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestSetuoraRemoteVariants(t *testing.T) {
 	valid := []string{
@@ -116,5 +120,44 @@ func TestParseOptionsSupportsUnifiedCommands(t *testing.T) {
 	}
 	if options.withCaddy {
 		t.Fatal("--with-caddy=false did not disable Caddy")
+	}
+}
+
+func TestMenuOffersStartStopAndUninstall(t *testing.T) {
+	cases := map[string]string{"1\r\n": "start", " 2\n": "stop", "3": "uninstall", "0": "", "4": "", "start": ""}
+	for choice, want := range cases {
+		if got := menuCommand(choice); got != want {
+			t.Errorf("menuCommand(%q) = %q, want %q", choice, got, want)
+		}
+	}
+}
+
+func TestParseOptionsAcceptsUninstall(t *testing.T) {
+	options, err := parseOptions([]string{"uninstall", "--install-dir", `C:\Setuora`})
+	if err != nil {
+		t.Fatalf("parseOptions(uninstall) returned %v", err)
+	}
+	if options.command != "uninstall" {
+		t.Fatalf("command = %q, want uninstall", options.command)
+	}
+}
+
+func TestBrowserURLPrefersCaddyHTTPSAddress(t *testing.T) {
+	installDir := t.TempDir()
+	options := installerOptions{installDir: installDir, port: 8123}
+	if got := browserURL(options); got != "http://127.0.0.1:8123" {
+		t.Fatalf("browserURL without Caddy = %q", got)
+	}
+
+	caddyDir := filepath.Join(installDir, "deployment", "caddy")
+	if err := os.MkdirAll(caddyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	caddyfile := "https://192.168.1.20 {\r\n\ttls internal\r\n\treverse_proxy 127.0.0.1:8000\r\n}\r\n"
+	if err := os.WriteFile(filepath.Join(caddyDir, "Caddyfile"), []byte(caddyfile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := browserURL(options); got != "https://192.168.1.20" {
+		t.Fatalf("browserURL with Caddy = %q, want https://192.168.1.20", got)
 	}
 }

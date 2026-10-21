@@ -81,21 +81,29 @@ Setuora-Local/
 
 ## Installation
 
-For a new Windows server, run `Setuora.exe` and choose **Install or finish
-setup**. Approve the administrator prompt. The installer installs missing
-prerequisites, checks out the official `main` branch under `C:\Setuora`, creates
-the environment, installs verified dependencies, configures HTTPS, and starts
-the Setuora and Caddy services.
+For a new Windows server, run `Setuora.exe` and choose **Start**. Approve the
+administrator prompt. The installer installs missing prerequisites, checks out
+the official `main` branch under `C:\Setuora`, creates the environment, installs
+verified dependencies, configures HTTPS, starts the Setuora and Caddy services,
+and opens the browser.
 
-The same executable manages the installation afterward:
+Double-click `Setuora.exe` afterward for the controls menu:
 
-```text
-Setuora.exe setup
-Setuora.exe repair
-Setuora.exe update
-Setuora.exe start
-Setuora.exe stop
-```
+- **Start** installs Setuora or finishes an interrupted installation. On an
+  installed copy it fast-forwards a clean checkout when GitHub is reachable,
+  then runs and verifies Setuora and opens the browser. When GitHub is
+  unreachable or the checkout has local changes, it warns and starts the
+  current version.
+- **Stop** stops Setuora and the HTTPS proxy and disables their automatic
+  startup, so they stay stopped after Windows restarts until you choose Start.
+- **Uninstall** stops Setuora, keeps a checksum-verified copy of `.env`, the
+  database and backups, logs, and the Caddy HTTPS state in
+  `C:\ProgramData\Setuora\Recovery\Local`, then removes the services, firewall
+  rule, HTTPS root certificate, and application folder. Python and Git remain.
+
+Each action requests administrator approval. The same actions are available as
+`Setuora.exe start`, `stop` and `uninstall`; `setup`, `repair` and `update`
+remain available for scripted maintenance.
 
 Use `Setuora.exe setup --with-caddy=false` only when a separately reviewed HTTPS
 proxy already exists. Complete the
@@ -161,8 +169,8 @@ voucher XML is approved for the target company.
 
 ## Operations
 
-Use `Setuora.exe start`, `stop`, `repair`, and `update` for routine service
-control. Updates refuse a dirty worktree, install the verified lock, run tests,
+Use `Setuora.exe` **Start** and **Stop** for routine service control, and
+`repair` or `update` for maintenance. A direct `update` refuses a dirty worktree, install the verified lock, run tests,
 and restore the prior running or stopped state. Runtime settings, databases,
 and backups are preserved.
 
